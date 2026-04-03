@@ -45,3 +45,6 @@ build*/
 
 # Android Studio
 .idea/*
+
+# avoid binary wrapper jar in PRs
+gradle/wrapper/gradle-wrapper.jar

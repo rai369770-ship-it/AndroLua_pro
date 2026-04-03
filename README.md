@@ -1,3 +1,48 @@
+# Androlua professional
+Modern Android-focused Androlua fork with AndroidX and CI-ready Gradle setup.
+
+## Build APK (Local) — Step by step
+1. Install **JDK 17** and make sure `java -version` reports Java 17.
+2. Open this repository root.
+3. Build debug APK:
+   ```bash
+   gradle :app:assembleDebug
+   ```
+4. Find debug output at:
+   `app/build/outputs/apk/debug/`
+
+## Build signed release APK (Local)
+1. Set environment variables:
+   ```bash
+   export RELEASE_STORE_FILE=app/src/main/assets/keys/keystore.ks
+   export RELEASE_STORE_PASSWORD='<store-password>'
+   export RELEASE_KEY_ALIAS='<key-alias>'
+   export RELEASE_KEY_PASSWORD='<key-password>'
+   ```
+2. Build release:
+   ```bash
+   gradle :app:assembleRelease
+   ```
+3. Find release output at:
+   `app/build/outputs/apk/release/`
+
+## Build on GitHub Actions
+1. Go to your repository settings in GitHub.
+2. Add repository secrets:
+   - `RELEASE_STORE_PASSWORD`
+   - `RELEASE_KEY_ALIAS`
+   - `RELEASE_KEY_PASSWORD`
+3. Push to any branch or open a pull request.
+4. Workflow file: `.github/workflows/android.yml`.
+5. Download APK artifacts from the workflow run artifacts section.
+
+## Notes
+- Min SDK: Android 7.0 (API 24)
+- Target/Compile SDK: Android 15 (API 35)
+- If you cannot download Gradle/Android dependencies in your network, use GitHub Actions to build.
+
+---
+
 ﻿# AndroLua-
 lua 5.3.3 for android pro
 
