@@ -19,7 +19,7 @@ activity.setTitle('Androlua professional')
 activity.setTheme(autotheme())
 
 function onVersionChanged(n, o)
-    local dlg = AlertDialogBuilder(activity)
+    local dlg = LuaDialog(activity)
     local title = "Update " .. o .. " > " .. n
     local msg = [[
 Latest updates:
@@ -252,9 +252,6 @@ m = {
         title = "Java Browser",
         id = "more_java", },
       { MenuItem,
-        title = "Manual",
-        id = "more_manual", },
-      { MenuItem,
         title = "About",
         id = "more_about", },
     },
@@ -282,6 +279,64 @@ end
 
 function donothing()
     print("Feature in development")
+end
+
+function editorGotoLine(line)
+    line = tonumber(line) or 1
+    if line < 1 then line = 1 end
+    local text = editor.getText().toString()
+    local index = 0
+    local current = 1
+    while current < line do
+        local nextBreak = text:find("\n", index + 1, true)
+        if not nextBreak then
+            index = #text
+            break
+        end
+        index = nextBreak
+        current = current + 1
+    end
+    editor.setSelection(index)
+end
+
+function editorFormat()
+    -- keep a lightweight formatter for plain EditText
+    local text = editor.getText().toString()
+    local trimmed = text:gsub("[ \t]+\n", "\n")
+    if trimmed ~= text then
+        editor.setText(trimmed)
+    end
+end
+
+function editorSearch()
+    Toast.makeText(activity, "Search is not available in EditText mode.", Toast.LENGTH_SHORT).show()
+end
+
+function editorUndo()
+    Toast.makeText(activity, "Undo is not available in EditText mode.", Toast.LENGTH_SHORT).show()
+end
+
+function editorRedo()
+    Toast.makeText(activity, "Redo is not available in EditText mode.", Toast.LENGTH_SHORT).show()
+end
+
+function editorGetSelectedText()
+    local text = editor.getText().toString()
+    local start = editor.getSelectionStart()
+    local endPos = editor.getSelectionEnd()
+    if not start or not endPos or start == endPos then
+        return nil
+    end
+    if start > endPos then
+        start, endPos = endPos, start
+    end
+    return text:sub(start + 1, endPos)
+end
+
+function editorAddNames(names)
+end
+
+function editorAddPackage(name, methods)
 end
 
 luaprojectdir = luajava.luaextdir .. "/project/"
@@ -326,7 +381,7 @@ function reopen(path)
     if f then
         local str = f:read("*all")
         if tostring(editor.getText()) ~= str then
-            editor.setText(str, true)
+            editor.setText(str)
         end
         f:close()
     end
@@ -535,7 +590,8 @@ function list(v, p)
     open_title.setText(p)
     --local adapter=ArrayAdapter(activity,android.R.layout.simple_list_item_1, String(td))
     --v.setAdapter(adapter)
-    open_dlg.setItems(td)
+    local items = ArrayListAdapter(activity, android.R.layout.simple_list_item_1, String(td))
+    v.setAdapter(items)
 end
 
 function list2(v, p)
@@ -818,13 +874,13 @@ func.play = function()
     activity.newActivity(runPath)
 end
 func.undo = function()
-    editor.undo()
+    editorUndo()
 end
 func.redo = function()
-    editor.redo()
+    editorRedo()
 end
 func.format = function()
-    editor.format()
+    editorFormat()
 end
 func.check = function(b)
     local src = editor.getText()
@@ -836,7 +892,7 @@ func.check = function(b)
 
     if data then
         local _, _, line, data = data:find(".(%d+).(.+)")
-        editor.gotoLine(tonumber(line))
+        editorGotoLine(tonumber(line))
         Toast.makeText(activity, line .. ":" .. data, Toast.LENGTH_SHORT ).show()
         return true
     elseif b then
@@ -863,11 +919,11 @@ func.navi = function()
 end
 
 func.seach = function()
-    editor.search()
+    editorSearch()
 end
 
 func.gotoline = function()
-    editor.gotoLine()
+    editorGotoLine(1)
 end
 
 func.luac = function()
@@ -935,9 +991,6 @@ func.java = function()
     activity.newActivity("javaapi/main")
 end
 
-func.manual = function()
-    activity.newActivity("luadoc")
-end
 
 func.helper = function()
     save()
@@ -986,7 +1039,7 @@ Highlights:
 Created by: Sujan Rai and SSteam.
 Contact: sujanrai8448@gmail.com
 ]]
-    local aboutDlg = AlertDialogBuilder(activity)
+    local aboutDlg = LuaDialog(activity)
     aboutDlg.setTitle("Welcome to AndroLua Professional")
     aboutDlg.setMessage(message)
     aboutDlg.setPositiveButton("Close", nil)
@@ -1027,7 +1080,6 @@ function onMenuItemSelected(id, item)
         [optmenu.more_helper] = func.helper,
         [optmenu.more_logcat] = func.logcat,
         [optmenu.more_java] = func.java,
-        [optmenu.more_manual] = func.manual,
         [optmenu.more_about] = func.about,
     }
 end
@@ -1075,14 +1127,14 @@ end
 function onActivityResult(req, res, intent)
     if res == 10000 then
         read(luapath)
-        editor.format()
+        editorFormat()
         return
     end
     if res ~= 0 then
         local data = intent.getStringExtra("data")
         local _, _, path, line = data:find("\n[	 ]*([^\n]-):(%d+):")
         if path == luapath then
-            editor.gotoLine(tonumber(line))
+            editorGotoLine(tonumber(line))
         end
         local classes = require "javaapi.android"
         local c = data:match("a nil value %(global '(%w+)'%)")
@@ -1107,7 +1159,7 @@ end
 function onStart()
     reopen(luapath)
     if isupdate then
-        editor.format()
+        editorFormat()
     end
     isupdate = false
 end
@@ -1142,7 +1194,7 @@ function create_imports_dlg()
     if imports_dlg then
         return
     end
-    imports_dlg = AlertDialogBuilder(activity)
+    imports_dlg = LuaDialog(activity)
     imports_dlg.setTitle("Import")
     imports_dlg.setPositiveButton("OK", {
         onClick = function()
@@ -1164,7 +1216,7 @@ function create_delete_dlg()
     if delete_dlg then
         return
     end
-    delete_dlg = AlertDialogBuilder(activity)
+    delete_dlg = LuaDialog(activity)
     delete_dlg.setTitle("Delete")
     delete_dlg.setPositiveButton("OK", {
         onClick = function()
@@ -1184,7 +1236,7 @@ function create_open_dlg()
     if open_dlg then
         return
     end
-    open_dlg = AlertDialogBuilder(activity)
+    open_dlg = LuaDialog(activity)
     open_dlg.setTitle("Open")
     open_title = TextView(activity)
     listview = open_dlg.ListView
@@ -1214,7 +1266,7 @@ function create_open_dlg2()
     if open_dlg2 then
         return
     end
-    open_dlg2 = AlertDialogBuilder(activity)
+    open_dlg2 = LuaDialog(activity)
     --open_dlg2.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
 
     open_dlg2.setTitle("RecentOpen")
@@ -1261,7 +1313,7 @@ function create_create_dlg()
     if create_dlg then
         return
     end
-    create_dlg = AlertDialogBuilder(activity)
+    create_dlg = LuaDialog(activity)
     create_dlg.setMessage(luadir)
     create_dlg.setTitle("New")
     create_e = EditText(activity)
@@ -1275,7 +1327,7 @@ function create_project_dlg()
     if project_dlg then
         return
     end
-    project_dlg = AlertDialogBuilder(activity)
+    project_dlg = LuaDialog(activity)
     project_dlg.setTitle("New project")
     project_dlg.setView(loadlayout(layout.project))
     project_dlg.setPositiveButton("OK", { onClick = create_project })
@@ -1286,7 +1338,7 @@ function create_build_dlg()
     if build_dlg then
         return
     end
-    build_dlg = AlertDialogBuilder(activity)
+    build_dlg = LuaDialog(activity)
     build_dlg.setTitle("Build APK")
     build_dlg.setView(loadlayout(layout.build))
     build_dlg.setPositiveButton("OK", { onClick = buildfile })
@@ -1315,7 +1367,7 @@ function create_import_dlg()
     if import_dlg then
         return
     end
-    import_dlg = AlertDialogBuilder(activity)
+    import_dlg = LuaDialog(activity)
     import_dlg.Title = "Possible classes to import"
     import_dlg.setPositiveButton("OK", nil)
 
@@ -1330,7 +1382,7 @@ function create_error_dlg()
     if error_dlg then
         return
     end
-    error_dlg = AlertDialogBuilder(activity)
+    error_dlg = LuaDialog(activity)
     error_dlg.Title = "Error"
     error_dlg.setPositiveButton("OK", nil)
 end
@@ -1379,13 +1431,13 @@ function showMoreActions(view)
           editor.selectAll()
           Toast.makeText(activity, "Selected all", Toast.LENGTH_SHORT).show()
         elseif t == "Copy" then
-          editor.copy()
+          editor.onTextContextMenuItem(android.R.id.copy)
           Toast.makeText(activity, "Copied", Toast.LENGTH_SHORT).show()
         elseif t == "Cut" then
-          editor.cut()
+          editor.onTextContextMenuItem(android.R.id.cut)
           Toast.makeText(activity, "Cut", Toast.LENGTH_SHORT).show()
         elseif t == "Paste" then
-          editor.paste()
+          editor.onTextContextMenuItem(android.R.id.paste)
           Toast.makeText(activity, "Pasted", Toast.LENGTH_SHORT).show()
         end
         return true
@@ -1436,7 +1488,7 @@ local function adds()
     return buf
 end
 task(adds, function(buf)
-    editor.addNames(buf)
+    editorAddNames(buf)
 end)
 
 local buf={}
@@ -1449,7 +1501,7 @@ for k,v in ipairs(curr_ms) do
         table.insert(buf,v)
     end
 end
-editor.addPackage("activity",buf)
+editorAddPackage("activity",buf)
 
 
 function fix(c)
@@ -1504,7 +1556,7 @@ function onKeyShortcut(keyCode, event)
         return true;
         case
         KeyEvent.KEYCODE_I
-        fix(editor.getSelectedText());
+        fix(editorGetSelectedText());
         return true;
     end
 end

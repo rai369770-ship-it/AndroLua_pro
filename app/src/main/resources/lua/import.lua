@@ -15,12 +15,18 @@ dexes = luajava.astable(luacontext.getClassLoaders())
 local libs = luacontext.getLibrarys()
 
 local function libsloader(path)
-    local p = libs[path:match("^%a+")]
+    local root = path:match("^[%w_]+")
+    local p = libs[path] or (root and libs[root])
     if p then
-        return assert(package.loadlib(p, "luaopen_" .. (path:gsub("%.", "_")))), p
-    else
-        return "\n\tno file ./libs/lib" .. path .. ".so"
+        local loader = package.loadlib(p, "luaopen_" .. (path:gsub("%.", "_")))
+        if not loader and root and root ~= path then
+            loader = package.loadlib(p, "luaopen_" .. root)
+        end
+        if loader then
+            return loader, p
+        end
     end
+    return "\n\tno file ./libs/lib" .. path .. ".so"
 end
 
 table.insert(package.searchers, libsloader)
@@ -499,5 +505,4 @@ end
 setmetatable(luajava, luajava_mt)
 
 return env_import
-
 
