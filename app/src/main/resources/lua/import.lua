@@ -4,13 +4,14 @@ local loaded = {}
 local imported = {}
 luajava.loaded = loaded
 luajava.imported = imported
+
 local _G = _G
 local insert = table.insert
-local new = luajava.new
 local bindClass = luajava.bindClass
 local dexes = {}
 local _M = {}
 local luacontext = activity or service
+
 dexes = luajava.astable(luacontext.getClassLoaders())
 local libs = luacontext.getLibrarys()
 
@@ -18,78 +19,44 @@ local function libsloader(path)
     local p = libs[path:match("^%a+")]
     if p then
         return assert(package.loadlib(p, "luaopen_" .. (path:gsub("%.", "_")))), p
-    else
-        return "\n\tno file ./libs/lib" .. path .. ".so"
     end
+    return "\n\tno file ./libs/lib" .. path .. ".so"
 end
 
 table.insert(package.searchers, libsloader)
 
-local function massage_classname(classname)
-    if classname:find('_') then
-        classname = classname:gsub('_', '$')
-    end
-    return classname
+package.preload["cjson"] = package.preload["cjson"] or function()
+    local json = require("json")
+    local module = {}
+    module.encode = json.encode
+    module.decode = json.decode
+    module.new = function() return module end
+    module.encode_sparse_array = function() return true end
+    module.encode_keep_buffer = function() return true end
+    module.encode_invalid_numbers = function() return true end
+    module.decode_invalid_numbers = function() return true end
+    module.null = json.null or nil
+    return module
 end
 
-local function bind_class(packagename)
-    local res, class = pcall(bindClass, packagename)
-    if res then
-        loaded[packagename] = class
-        return class
-    end
-end
-
-local function import_class(packagename)
-    packagename = massage_classname(packagename)
-    local class = loaded[packagename] or bind_class(packagename)
-    return class
-end
-
-local function bind_dex_class(packagename)
-    packagename = massage_classname(packagename)
-    for _, dex in ipairs(dexes) do
-        local res, class = pcall(dex.loadClass, packagename)
-        if res then
-            loaded[packagename] = class
-            return class
+package.preload["cjson.safe"] = package.preload["cjson.safe"] or function()
+    local cjson = require("cjson")
+    local safe = {}
+    safe.encode = function(v)
+        local ok, res = pcall(cjson.encode, v)
+        if ok then
+            return res
         end
+        return nil, res
     end
-end
-
-local function import_dex_class(packagename)
-    packagename = massage_classname(packagename)
-    local class = loaded[packagename] or bind_dex_class(packagename)
-    return class
-end
-
-local pkgMT = {
-    __index = function(T, classname)
-        local ret, class = pcall(luajava.bindClass, rawget(T, "__name") .. classname)
-        if ret then
-            rawset(T, classname, class)
-            return class
-        else
-            error(classname .. " is not in " .. rawget(T, "__name"), 2)
+    safe.decode = function(v)
+        local ok, res = pcall(cjson.decode, v)
+        if ok then
+            return res
         end
+        return nil, res
     end
-}
-
-local function import_pacckage(packagename)
-    local pkg = { __name = packagename }
-    setmetatable(pkg, pkgMT)
-    return pkg
-end
-
-
---setmetatable(_G, globalMT)
-
-local function import_require(name)
-    local s, r = pcall(require, name)
-    if not s and not r:find("no file") then
-        error(r, 0)
-    end
-    return s and r
+    return safe
 end
 
 local function append(t, v)
@@ -101,59 +68,139 @@ local function append(t, v)
     insert(t, v)
 end
 
+local function massage_classname(classname)
+    if classname:find('_') then
+        classname = classname:gsub('_', '$')
+    end
+    return classname
+end
+
+local function bind_class(packagename)
+    local ok, class = pcall(bindClass, massage_classname(packagename))
+    if ok and class then
+        loaded[packagename] = class
+        return class
+    end
+end
+
+local function bind_dex_class(packagename)
+    packagename = massage_classname(packagename)
+    for _, dex in ipairs(dexes) do
+        local ok, class = pcall(dex.loadClass, packagename)
+        if ok and class then
+            loaded[packagename] = class
+            return class
+        end
+    end
+end
+
+local function import_class(packagename)
+    packagename = massage_classname(packagename)
+    return loaded[packagename] or bind_class(packagename) or bind_dex_class(packagename)
+end
+
+
+local function import_dex_class(packagename)
+    packagename = massage_classname(packagename)
+    return loaded[packagename] or bind_dex_class(packagename)
+end
+
+local pkgMT = {
+    __index = function(T, classname)
+        local fqcn = rawget(T, "__name") .. classname
+        local class = import_class(fqcn)
+        if class then
+            rawset(T, classname, class)
+            return class
+        end
+        error(classname .. " is not in " .. rawget(T, "__name"), 2)
+    end
+}
+
+local function import_package(packagename)
+    local pkg = { __name = packagename }
+    setmetatable(pkg, pkgMT)
+    return pkg
+end
+
+local function import_require(name)
+    local ok, ret = pcall(require, name)
+    if ok then
+        return ret
+    end
+    if type(ret) == "string" and ret:find("not found", 1, true) then
+        return nil
+    end
+    if type(ret) == "string" and ret:find("no file", 1, true) then
+        return nil
+    end
+    error(ret, 0)
+end
+
 local function local_import(_env, packages, package)
     local j = package:find(':')
     if j then
         local dexname = package:sub(1, j - 1)
         local classname = package:sub(j + 1, -1)
         local class = luacontext.loadDex(dexname).loadClass(classname)
-        local classname = package:match('([^%.$]+)$')
-        _env[classname] = class
+        local cname = package:match('([^%.$]+)$')
+        _env[cname] = class
         append(imported, package)
         return class
     end
-    local i = package:find('%*$')
-    if i then -- a wildcard; put into the package list, including the final '.'
-        append(packages, package:sub(1, -2))
-        append(imported, package)
-        return import_pacckage(package:sub(1, -2))
-    else
-        local classname = package:match('([^%.$]+)$')
-        local class = import_require(package) or import_class(package) or import_dex_class(package)
-        if class then
-            if class ~= true then
-                --findtable(package)=class
-                if type(class) ~= "table" then
-                    append(imported, package)
-                end
-                _env[classname] = class
-            end
-            return class
-        else
-            error("cannot find " .. package, 2)
-        end
-    end
-end
 
+    if package:find('%*$') then
+        local prefix = package:sub(1, -2)
+        append(packages, prefix)
+        append(imported, package)
+        return import_package(prefix)
+    end
+
+    local classname = package:match('([^%.$]+)$')
+    local class = import_require(package) or import_class(package)
+    if class then
+        if class ~= true then
+            if type(class) ~= "table" then
+                append(imported, package)
+            end
+            _env[classname] = class
+        end
+        return class
+    end
+
+    error("cannot find " .. package, 2)
+end
 
 local function env_import(env)
     local _env = env or {}
     local packages = {}
     local loaders = {}
-    append(packages, '')
-    append(packages, 'java.lang.')
-    append(packages, 'java.util.')
-    append(packages, 'com.androlua.')
-    append(packages, 'androidx.appcompat.widget.')
-    append(packages, 'androidx.core.content.')
-    append(packages, 'androidx.recyclerview.widget.')
-    append(packages, 'androidx.camera.core.')
-    append(packages, 'androidx.media3.exoplayer.')
-    append(packages, 'okhttp3.')
-    append(packages, 'okio.')
 
-    local function import_1(classname)
-        for i, p in ipairs(packages) do
+    local default_packages = {
+        '',
+        'java.lang.',
+        'java.util.',
+        'java.io.',
+        'android.',
+        'android.view.',
+        'android.widget.',
+        'androidx.appcompat.widget.',
+        'androidx.core.content.',
+        'androidx.recyclerview.widget.',
+        'androidx.camera.core.',
+        'androidx.camera.view.',
+        'androidx.media3.exoplayer.',
+        'com.androlua.',
+        'okhttp3.',
+        'okio.',
+    }
+
+    for _, pkg in ipairs(default_packages) do
+        append(packages, pkg)
+    end
+
+    local function try_packages(classname)
+        for _, p in ipairs(packages) do
             local class = import_class(p .. classname)
             if class then
                 return class
@@ -161,22 +208,12 @@ local function env_import(env)
         end
     end
 
-    local function import_2(classname)
-        for _, p in ipairs(packages) do
-            local class = import_dex_class(p .. classname)
-            if class then
-                return class
-            end
-        end
-    end
-
-    append(loaders, import_1)
-    append(loaders, import_2)
+    append(loaders, try_packages)
 
     local globalMT = {
         __index = function(T, classname)
-            for i, p in ipairs(loaders) do
-                local class = loaded[classname] or p(classname)
+            for _, loader in ipairs(loaders) do
+                local class = loaded[classname] or loader(classname)
                 if class then
                     T[classname] = class
                     return class
@@ -186,34 +223,34 @@ local function env_import(env)
         end
     }
 
-    if type(_env)=="string" then
-        return globalMT.__index({},_env)
+    if type(_env) == "string" then
+        return globalMT.__index({}, _env)
     end
 
     setmetatable(_env, globalMT)
     for k, v in pairs(_M) do
         _env[k] = v
     end
-    local import = function(package, env)
-        env = env or _env
+
+    local import = function(package, custom_env)
+        custom_env = custom_env or _env
         if type(package) == "string" then
-            return local_import(env, packages, package)
+            return local_import(custom_env, packages, package)
         elseif type(package) == "table" then
             local ret = {}
             for k, v in ipairs(package) do
-                ret[k] = local_import(env, packages, v)
+                ret[k] = local_import(custom_env, packages, v)
             end
             return ret
         end
     end
-    _env.import = import
 
+    _env.import = import
     import("loadlayout", _env)
     import("loadbitmap", _env)
     import("loadmenu", _env)
     return _env
 end
-
 
 function _M.compile(name)
     append(dexes, luacontext.loadDex(name))

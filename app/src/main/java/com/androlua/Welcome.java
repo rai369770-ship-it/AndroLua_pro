@@ -144,13 +144,13 @@ public class Welcome extends Activity {
         int padding = dp(16);
         container.setPadding(padding, padding, padding, padding);
 
-        addSection(container, "A. Built with the goal of making Lua-based Android app development simple and modern.");
-        addSection(container, "B. Hello, I am Sujan Rai. I redesigned AndroLua Professional to support modern Android versions.");
-        addSection(container, "C. Earlier AndroLua editions and related apps were no longer actively maintained, so many users faced bugs and errors. This professional edition was developed with those challenges in mind.");
-        addSection(container, "D. This project can continue to grow only with your ongoing support.");
-        addSection(container, "E. I have enhanced LuaJava and Java API support, and integrated modern libraries such as AndroidX, CameraX, OkHttp, Okio, and ExoPlayer to solve practical, everyday development needs.");
-        addSection(container, "F. The next version will include downloading and setting up custom libraries directly in the app.");
-        addSection(container, "G. Your continued support and love mean a lot to me.");
+        addSection(container, "Built with the goal of making Lua-based Android app development simple and modern.");
+        addSection(container, "Hello, I am Sujan Rai. I redesigned AndroLua Professional to support modern Android versions.");
+        addSection(container, "Earlier AndroLua editions and related apps were no longer actively maintained, so many users faced bugs and errors. This professional edition was developed with those challenges in mind.");
+        addSection(container, "This project can continue to grow only with your ongoing support.");
+        addSection(container, "I have enhanced LuaJava and Java API support, and integrated modern libraries such as AndroidX, CameraX, OkHttp, Okio, and ExoPlayer to solve practical, everyday development needs.");
+        addSection(container, "The next version will include downloading and setting up custom libraries directly in the app.");
+        addSection(container, "Your continued support and love mean a lot to me.");
 
         scrollView.addView(container);
 

@@ -26,7 +26,7 @@ local function callback(s)
     LuaUtil.rmDir(File(activity.getLuaExtDir("bin/.temp")))
     bin_dlg.hide()
     bin_dlg.Message = ""
-    if not s:find("成功") then
+    if not s:find("success") then
         error_dlg.Message = s
         error_dlg.show()
     end
@@ -37,7 +37,7 @@ local function create_bin_dlg()
         return
     end
     bin_dlg = ProgressDialog(activity);
-    bin_dlg.setTitle("正在打包");
+    bin_dlg.setTitle("Building APK");
     bin_dlg.setMax(100);
 end
 
@@ -46,8 +46,8 @@ local function create_error_dlg2()
         return
     end
     error_dlg = AlertDialogBuilder(activity)
-    error_dlg.Title = "出错"
-    error_dlg.setPositiveButton("确定", nil)
+    error_dlg.Title = "Error"
+    error_dlg.setPositiveButton("OK", nil)
 end
 
 local function binapk(luapath, apkpath)
@@ -231,7 +231,7 @@ local function binapk(luapath, apkpath)
     end
 
 
-    this.update("正在编译...");
+    this.update("Compiling...");
     if f.isDirectory() then
         require "permission"
         dofile(luapath .. "init.lua")
@@ -290,7 +290,7 @@ local function binapk(luapath, apkpath)
         return table.concat(uint)
     end
 
-    this.update("正在打包...");
+    this.update("Packaging...");
     local entry = zis.getNextEntry();
     while entry do
         local name = entry.getName()
@@ -358,7 +358,7 @@ local function binapk(luapath, apkpath)
     out.close()
 
     if #errbuffer == 0 then
-        this.update("正在签名...");
+        this.update("Signing...");
         os.remove(apkpath)
         Signer.sign(tmp, apkpath)
         os.remove(tmp)
@@ -369,13 +369,13 @@ local function binapk(luapath, apkpath)
         i.setDataAndType(activity.getUriForFile(File(apkpath)), "application/vnd.android.package-archive");
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        this.update("正在打开...");
+        this.update("Opening...");
         activity.startActivityForResult(i, 0);]]
-        return "打包成功:" .. apkpath
+        return "Build success: " .. apkpath
     else
         os.remove(tmp)
-        this.update("打包出错:\n " .. table.concat(errbuffer, "\n"));
-        return "打包出错:\n " .. table.concat(errbuffer, "\n")
+        this.update("Build failed:\n " .. table.concat(errbuffer, "\n"));
+        return "Build failed:\n " .. table.concat(errbuffer, "\n")
     end
 end
 
@@ -390,7 +390,7 @@ local function bin(path)
         bin_dlg.show()
         activity.newTask(binapk, update, callback).execute { path, activity.getLuaExtPath("bin", p.appname .. "_" .. p.appver .. ".apk") }
     else
-        Toast.makeText(activity, "工程配置文件错误." .. s, Toast.LENGTH_SHORT).show()
+        Toast.makeText(activity, "Project config file error: " .. s, Toast.LENGTH_SHORT).show()
     end
 end
 
