@@ -190,7 +190,7 @@ relative={
 }
 
 --属性列表对话框
-fd_dlg=AlertDialogBuilder(activity)
+fd_dlg=LuaDialog(activity)
 fd_list=fd_dlg.getListView()
 fds_grid={
   "添加","删除","父控件","子控件",
@@ -322,7 +322,7 @@ fd_list.onItemClick=function(l,v,p,i)
 end
 
 --子视图列表对话框
-cd_dlg=AlertDialogBuilder(activity)
+cd_dlg=LuaDialog(activity)
 cd_list=cd_dlg.getListView()
 cd_list.onItemClick=function(l,v,p,i)
   getCurr(chids[p])
@@ -330,7 +330,7 @@ cd_list.onItemClick=function(l,v,p,i)
 end
 
 --可选属性对话框
-check_dlg=AlertDialogBuilder(activity)
+check_dlg=LuaDialog(activity)
 check_list=check_dlg.getListView()
 check_list.onItemClick=function(l,v,p,i)
   local v=tostring(v.Text)
@@ -488,7 +488,7 @@ end
 
 
 --输入属性对话框
-sfd_dlg=AlertDialogBuilder(activity)
+sfd_dlg=LuaDialog(activity)
 fld=EditText(activity)
 sfd_dlg.setView(fld)
 sfd_dlg.setPositiveButton("确定",{onClick=ok})
