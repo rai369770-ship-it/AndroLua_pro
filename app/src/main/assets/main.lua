@@ -153,8 +153,9 @@ lcode = [[
   layout_width="fill",
   layout_height="fill",
   {
-    TextView,
+    EditText,
     text="hello Androlua professional",
+    hint="Type here",
     layout_width="fill",
   },
 }

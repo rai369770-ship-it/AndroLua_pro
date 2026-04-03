@@ -17,16 +17,21 @@ import "android.app.ProgressDialog"
 import "java.util.zip.CheckedOutputStream"
 import "java.util.zip.Adler32"
 
-local bin_dlg, error_dlg
+local bin_dlg, error_dlg, create_error_dlg2
 local function update(s)
-    bin_dlg.setMessage(s)
+    if bin_dlg then
+        bin_dlg.setMessage(s)
+    end
 end
 
 local function callback(s)
     LuaUtil.rmDir(File(activity.getLuaExtDir("bin/.temp")))
-    bin_dlg.hide()
-    bin_dlg.Message = ""
+    if bin_dlg then
+        bin_dlg.hide()
+        bin_dlg.Message = ""
+    end
     if not s:find("success") then
+        create_error_dlg2()
         error_dlg.Message = s
         error_dlg.show()
     end
@@ -41,7 +46,7 @@ local function create_bin_dlg()
     bin_dlg.setMax(100);
 end
 
-local function create_error_dlg2()
+create_error_dlg2 = function()
     if error_dlg then
         return
     end
@@ -385,15 +390,6 @@ local function bin(path)
     local p = {}
     local e, s = pcall(loadfile(path .. "init.lua", "bt", p))
     if e then
-        if type(create_error_dlg2) == "function" then
-            create_error_dlg2()
-        else
-            error_dlg = error_dlg or AlertDialogBuilder(activity)
-            error_dlg.Title = "Error"
-            error_dlg.setPositiveButton("OK", nil)
-        end
-        create_bin_dlg()
-        bin_dlg.show()
         activity.newTask(binapk, update, callback).execute { path, activity.getLuaExtPath("bin", p.appname .. "_" .. p.appver .. ".apk") }
     else
         Toast.makeText(activity, "Project config file error: " .. s, Toast.LENGTH_SHORT).show()
