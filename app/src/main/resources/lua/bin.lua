@@ -385,7 +385,13 @@ local function bin(path)
     local p = {}
     local e, s = pcall(loadfile(path .. "init.lua", "bt", p))
     if e then
-        create_error_dlg2()
+        if type(create_error_dlg2) == "function" then
+            create_error_dlg2()
+        else
+            error_dlg = error_dlg or AlertDialogBuilder(activity)
+            error_dlg.Title = "Error"
+            error_dlg.setPositiveButton("OK", nil)
+        end
         create_bin_dlg()
         bin_dlg.show()
         activity.newTask(binapk, update, callback).execute { path, activity.getLuaExtPath("bin", p.appname .. "_" .. p.appver .. ".apk") }
