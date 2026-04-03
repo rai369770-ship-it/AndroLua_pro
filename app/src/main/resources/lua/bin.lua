@@ -16,20 +16,41 @@ import "java.util.zip.ZipEntry"
 import "android.app.ProgressDialog"
 import "java.util.zip.CheckedOutputStream"
 import "java.util.zip.Adler32"
+import "android.os.Handler"
+import "android.os.Looper"
 
-local bin_dlg, error_dlg
+local bin_dlg, error_dlg, create_error_dlg2
+local main_handler = Handler(Looper.getMainLooper())
+
+local function run_on_main_thread(fn)
+    if Looper.myLooper() == Looper.getMainLooper() then
+        fn()
+        return
+    end
+    main_handler.post(luajava.createProxy("java.lang.Runnable", { run = fn }))
+end
+
 local function update(s)
-    bin_dlg.setMessage(s)
+    run_on_main_thread(function()
+        if bin_dlg then
+            bin_dlg.setMessage(s)
+        end
+    end)
 end
 
 local function callback(s)
-    LuaUtil.rmDir(File(activity.getLuaExtDir("bin/.temp")))
-    bin_dlg.hide()
-    bin_dlg.Message = ""
-    if not s:find("success") then
-        error_dlg.Message = s
-        error_dlg.show()
-    end
+    run_on_main_thread(function()
+        LuaUtil.rmDir(File(activity.getLuaExtDir("bin/.temp")))
+        if bin_dlg then
+            bin_dlg.hide()
+            bin_dlg.Message = ""
+        end
+        if not s:find("success") then
+            create_error_dlg2()
+            error_dlg.Message = s
+            error_dlg.show()
+        end
+    end)
 end
 
 local function create_bin_dlg()
@@ -41,7 +62,7 @@ local function create_bin_dlg()
     bin_dlg.setMax(100);
 end
 
-local function create_error_dlg2()
+create_error_dlg2 = function()
     if error_dlg then
         return
     end
@@ -382,19 +403,24 @@ end
 --luabindir=activity.getLuaExtDir("bin")
 --print(activity.getLuaExtPath("bin","a"))
 local function bin(path)
+    if type(path) ~= "string" or #path == 0 then
+        Toast.makeText(activity, "Invalid project path", Toast.LENGTH_SHORT).show()
+        return
+    end
+    if path:sub(-1) ~= "/" then
+        path = path .. "/"
+    end
+
     local p = {}
     local e, s = pcall(loadfile(path .. "init.lua", "bt", p))
     if e then
-        if type(create_error_dlg2) == "function" then
-            create_error_dlg2()
-        else
-            error_dlg = error_dlg or AlertDialogBuilder(activity)
-            error_dlg.Title = "Error"
-            error_dlg.setPositiveButton("OK", nil)
-        end
-        create_bin_dlg()
-        bin_dlg.show()
-        activity.newTask(binapk, update, callback).execute { path, activity.getLuaExtPath("bin", p.appname .. "_" .. p.appver .. ".apk") }
+        p.appname = tostring(p.appname or "AndroLuaApp")
+        p.appver = tostring(p.appver or "1.0")
+        run_on_main_thread(function()
+            create_bin_dlg()
+            bin_dlg.show()
+            activity.newTask(binapk, update, callback).execute { path, activity.getLuaExtPath("bin", p.appname .. "_" .. p.appver .. ".apk") }
+        end)
     else
         Toast.makeText(activity, "Project config file error: " .. s, Toast.LENGTH_SHORT).show()
     end

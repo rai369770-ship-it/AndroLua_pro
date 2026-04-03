@@ -14,6 +14,21 @@ local dexes = {}
 local _M = {}
 local luacontext = activity or service
 
+local class_aliases = {
+    AlertDialogBuilder = "android.app.AlertDialog$Builder",
+    AppCompatTextView = "androidx.appcompat.widget.AppCompatTextView",
+    AppCompatEditText = "androidx.appcompat.widget.AppCompatEditText",
+    AppCompatButton = "androidx.appcompat.widget.AppCompatButton",
+    AppCompatImageView = "androidx.appcompat.widget.AppCompatImageView",
+    RecyclerView = "androidx.recyclerview.widget.RecyclerView",
+    LinearLayoutManager = "androidx.recyclerview.widget.LinearLayoutManager",
+    OkHttpClient = "okhttp3.OkHttpClient",
+    Request = "okhttp3.Request",
+    Response = "okhttp3.Response",
+    MediaType = "okhttp3.MediaType",
+    RequestBody = "okhttp3.RequestBody",
+}
+
 dexes = luajava.astable(luacontext.getClassLoaders())
 local libs = luacontext.getLibrarys()
 
@@ -77,6 +92,29 @@ local function massage_classname(classname)
     return classname
 end
 
+local function nested_class_name(classname)
+    if classname:find("%$") then
+        return nil
+    end
+
+    local package_prefix, simple = classname:match("^(.*%.)([^%.]+)$")
+    simple = simple or classname
+
+    local outer, inner = simple:match("^([A-Z][%w]-)(Builder)$")
+    if not outer then
+        outer, inner = simple:match("^([A-Z][%w]-)(Factory)$")
+    end
+    if not outer then
+        return nil
+    end
+
+    local nested = outer .. "$" .. inner
+    if package_prefix then
+        return package_prefix .. nested
+    end
+    return nested
+end
+
 local function bind_class(packagename)
     local ok, class = pcall(bindClass, massage_classname(packagename))
     if ok and class then
@@ -126,9 +164,23 @@ end
 
 local function import_class(packagename)
     packagename = massage_classname(packagename)
+
+    local mapped = class_aliases[packagename]
+    if mapped then
+        packagename = mapped
+    end
+
     local class = loaded[packagename] or bind_class(packagename) or bind_dex_class(packagename)
     if class then
         return class
+    end
+
+    local nested_name = nested_class_name(packagename)
+    if nested_name then
+        class = loaded[nested_name] or bind_class(nested_name) or bind_dex_class(nested_name)
+        if class then
+            return class
+        end
     end
 
     local alias = packagename:gsub("%$", "_")
@@ -169,11 +221,13 @@ local function import_require(name)
     if ok then
         return ret
     end
-    if type(ret) == "string" and ret:find("not found", 1, true) then
-        return nil
-    end
-    if type(ret) == "string" and ret:find("no file", 1, true) then
-        return nil
+    if type(ret) == "string" then
+        if ret:find("not found", 1, true)
+                or ret:find("module '", 1, true)
+                or ret:find("no field package.preload", 1, true)
+                or ret:find("no file", 1, true) then
+            return nil
+        end
     end
     error(ret, 0)
 end
@@ -223,10 +277,12 @@ local function env_import(env)
         'java.util.',
         'java.io.',
         'android.',
+        'android.app.',
         'android.view.',
         'android.widget.',
         'androidx.',
         'androidx.appcompat.',
+        'androidx.appcompat.app.',
         'androidx.appcompat.widget.',
         'androidx.core.',
         'androidx.core.content.',
@@ -234,9 +290,17 @@ local function env_import(env)
         'androidx.camera.core.',
         'androidx.camera.view.',
         'androidx.media3.exoplayer.',
+        'androidx.lifecycle.',
+        'androidx.activity.',
+        'androidx.fragment.app.',
+        'android.text.',
+        'android.graphics.',
+        'android.graphics.drawable.',
+        'android.net.',
+        'okhttp3.logging.',
+        'okio.',
         'com.androlua.',
         'okhttp3.',
-        'okio.',
     }
 
     for _, pkg in ipairs(default_packages) do
