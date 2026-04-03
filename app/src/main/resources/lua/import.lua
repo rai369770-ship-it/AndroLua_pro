@@ -77,6 +77,16 @@ local function massage_classname(classname)
     return classname
 end
 
+local function nested_builder_name(classname)
+    if classname:find("%$") or classname:find("%.") then
+        return nil
+    end
+    local outer, inner = classname:match("^([A-Z][%w]-)(Builder)$")
+    if outer and inner then
+        return outer .. "$" .. inner
+    end
+end
+
 local function bind_class(packagename)
     local ok, class = pcall(bindClass, massage_classname(packagename))
     if ok and class then
@@ -129,6 +139,14 @@ local function import_class(packagename)
     local class = loaded[packagename] or bind_class(packagename) or bind_dex_class(packagename)
     if class then
         return class
+    end
+
+    local nested_name = nested_builder_name(packagename)
+    if nested_name then
+        class = loaded[nested_name] or bind_class(nested_name) or bind_dex_class(nested_name)
+        if class then
+            return class
+        end
     end
 
     local alias = packagename:gsub("%$", "_")
@@ -223,10 +241,12 @@ local function env_import(env)
         'java.util.',
         'java.io.',
         'android.',
+        'android.app.',
         'android.view.',
         'android.widget.',
         'androidx.',
         'androidx.appcompat.',
+        'androidx.appcompat.app.',
         'androidx.appcompat.widget.',
         'androidx.core.',
         'androidx.core.content.',
