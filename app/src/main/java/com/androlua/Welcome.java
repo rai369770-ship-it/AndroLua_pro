@@ -1,9 +1,9 @@
 package com.androlua;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
@@ -14,10 +14,14 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.Settings;
+import android.util.TypedValue;
 import android.view.Gravity;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 
 import com.luajava.LuaFunction;
 import com.luajava.LuaState;
@@ -46,6 +50,7 @@ public class Welcome extends Activity {
     private String mVersionName;
     private String mOldVersionName;
     private ArrayList<String> permissions;
+    private boolean waitingForAllFilesAccessResult;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -71,7 +76,28 @@ public class Welcome extends Activity {
             return;
         }
 
-        continueBoot();
+        ensureStorageAccessThenContinue();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (waitingForAllFilesAccessResult) {
+            waitingForAllFilesAccessResult = false;
+            ensureStorageAccessThenContinue();
+        }
+    }
+
+    private void ensureStorageAccessThenContinue() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+                showAllFilesAccessDialog();
+                return;
+            }
+            continueBoot();
+            return;
+        }
+        requestLegacyStoragePermissions();
     }
 
     private void continueBoot() {
@@ -112,42 +138,101 @@ public class Welcome extends Activity {
     }
 
     private void showWelcomeDialog() {
-        String message = "Built with mind of app development In lua.\n\n"
-                + "Hello, I am Sujan Rai. I have redesigned the androlua professional to support the modern android. "
-                + "The edition of androlua and affiliated apps were discontinued to be updated. Users were very easy to code lua to build android apps. "
-                + "However, due to disconnuity of the applications, they were facing lots of bugs and errors. "
-                + "Keeping everything in mind, the androlua professional is developed.\n\n"
-                + "The application will longer be available until your support.\n\n"
-                + "I have enhanced luajava, java apis support and integrated standard libraries like androidx, camerax, okhttp, okio and exo player to solve your across daily life problems.\n\n"
-                + "The next version will support custom libraries download and setup.\n\n"
-                + "Your continued support and love means me a lot.";
+        ScrollView scrollView = new ScrollView(this);
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        int padding = dp(16);
+        container.setPadding(padding, padding, padding, padding);
+
+        addSection(container, "A. Built with the goal of making Lua-based Android app development simple and modern.");
+        addSection(container, "B. Hello, I am Sujan Rai. I redesigned AndroLua Professional to support modern Android versions.");
+        addSection(container, "C. Earlier AndroLua editions and related apps were no longer actively maintained, so many users faced bugs and errors. This professional edition was developed with those challenges in mind.");
+        addSection(container, "D. This project can continue to grow only with your ongoing support.");
+        addSection(container, "E. I have enhanced LuaJava and Java API support, and integrated modern libraries such as AndroidX, CameraX, OkHttp, Okio, and ExoPlayer to solve practical, everyday development needs.");
+        addSection(container, "F. The next version will include downloading and setting up custom libraries directly in the app.");
+        addSection(container, "G. Your continued support and love mean a lot to me.");
+
+        scrollView.addView(container);
 
         new AlertDialog.Builder(this)
-                .setTitle("Welcome to androlua professional")
-                .setMessage(message)
+                .setTitle("Welcome to AndroLua Professional")
+                .setView(scrollView)
                 .setCancelable(false)
-                .setPositiveButton("Continue", (dialog, which) -> showAllFilesAccessDialog())
+                .setPositiveButton("Continue", (dialog, which) -> {
+                    markFirstLaunchDone();
+                    ensureStorageAccessThenContinue();
+                })
                 .show();
     }
 
+    private void addSection(LinearLayout container, String message) {
+        TextView textView = new TextView(this);
+        textView.setText(message);
+        textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        textView.setTextColor(0xFF222222);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        params.bottomMargin = dp(14);
+        textView.setLayoutParams(params);
+        container.addView(textView);
+    }
+
+    private int dp(int value) {
+        return (int) (value * getResources().getDisplayMetrics().density);
+    }
+
     private void showAllFilesAccessDialog() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()) {
-            markFirstLaunchDone();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            requestLegacyStoragePermissions();
+            return;
+        }
+
+        String message;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            message = "To work with Lua projects and device storage, allow All files access in system settings.";
+        } else {
+            message = "Android 10 requires storage access permissions. Continue to grant storage permissions for project files.";
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("Storage access required")
+                .setMessage(message)
+                .setCancelable(false)
+                .setPositiveButton("Grant access", (dialog, which) -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                Uri.parse("package:" + getPackageName()));
+                        waitingForAllFilesAccessResult = true;
+                        startActivity(intent);
+                    } else {
+                        requestLegacyStoragePermissions();
+                    }
+                })
+                .show();
+    }
+
+    private void requestLegacyStoragePermissions() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
             continueBoot();
             return;
         }
-        new AlertDialog.Builder(this)
-                .setTitle("Allow all files access")
-                .setMessage("To work with the lua files and storage, allow all files access in the settings.")
-                .setCancelable(false)
-                .setPositiveButton("Grant access", (dialog, which) -> {
-                    Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                            Uri.parse("package:" + getPackageName()));
-                    startActivity(intent);
-                    markFirstLaunchDone();
-                    continueBoot();
-                })
-                .show();
+
+        ArrayList<String> legacyPermissions = new ArrayList<>();
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            legacyPermissions.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            legacyPermissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        }
+
+        if (legacyPermissions.isEmpty()) {
+            continueBoot();
+            return;
+        }
+
+        requestPermissions(legacyPermissions.toArray(new String[0]), 101);
     }
 
     private void checkPermission(String permission) {
@@ -159,6 +244,10 @@ public class Welcome extends Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 101) {
+            ensureStorageAccessThenContinue();
+            return;
+        }
         new UpdateTask().execute();
     }
 
@@ -260,8 +349,10 @@ public class Welcome extends Activity {
                     String fname = extDir + File.separator + path;
                     File ff = new File(fname);
                     File temp = new File(fname).getParentFile();
-                    if (!temp.exists() && !temp.mkdirs()) {
-                        throw new RuntimeException("create file " + temp.getName() + " fail");
+                    if (!temp.exists()) {
+                        if (!temp.mkdirs()) {
+                            throw new RuntimeException("create file " + temp.getName() + " fail");
+                        }
                     }
                     try {
                         if (ff.exists() && entry.getSize() == ff.length() && LuaUtil.getFileMD5(zip.getInputStream(entry)).equals(LuaUtil.getFileMD5(ff)))

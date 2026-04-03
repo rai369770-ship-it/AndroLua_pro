@@ -38,7 +38,7 @@ layout={
         text="Script path"
       },
       {
-        androidx.appcompat.widget.AppCompatEditText,
+        "androidx.appcompat.widget.AppCompatEditText",
         id="luaPath",
         layout_width="fill",
         singleLine=true,
@@ -48,7 +48,7 @@ layout={
         text="Package name"
       },
       {
-        androidx.appcompat.widget.AppCompatEditText,
+        "androidx.appcompat.widget.AppCompatEditText",
         id="packageName",
         layout_width="fill",
         singleLine=true,
@@ -58,7 +58,7 @@ layout={
         text="App name"
       },
       {
-        androidx.appcompat.widget.AppCompatEditText,
+        "androidx.appcompat.widget.AppCompatEditText",
         id="appName",
         layout_width="fill",
         singleLine=true,
@@ -68,7 +68,7 @@ layout={
         text="App version"
       },
       {
-        androidx.appcompat.widget.AppCompatEditText,
+        "androidx.appcompat.widget.AppCompatEditText",
         id="appVer",
         layout_width="fill",
         singleLine=true,
@@ -78,7 +78,7 @@ layout={
         text="APK path"
       },
       {
-        androidx.appcompat.widget.AppCompatEditText,
+        "androidx.appcompat.widget.AppCompatEditText",
         id="apkPath",
         layout_width="fill",
         singleLine=true,
@@ -104,7 +104,7 @@ layout={
         text="App name"
       },
       {
-        androidx.appcompat.widget.AppCompatEditText,
+        "androidx.appcompat.widget.AppCompatEditText",
         id="project_appName",
         text="demo",
         layout_width="fill",
@@ -115,7 +115,7 @@ layout={
         text="Package name"
       },
       {
-        androidx.appcompat.widget.AppCompatEditText,
+        "androidx.appcompat.widget.AppCompatEditText",
         id="project_packageName",
         text="com.androlua.demo",
         layout_width="fill",
@@ -127,7 +127,7 @@ layout={
     LinearLayout;
     orientation="vertical";
     {
-      androidx.appcompat.widget.AppCompatEditText;
+      "androidx.appcompat.widget.AppCompatEditText";
       layout_width="fill";
       id="open_edit";
     };
