@@ -24,12 +24,10 @@ jobs:
       - name: Build debug APK
         run: gradle --no-daemon :app:assembleDebug
 
-      - name: Build signed release APK
-        env:
-          RELEASE_STORE_FILE: app/src/main/assets/keys/keystore.ks
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+      - name: Install NDK
+        run: sdkmanager "ndk;25.2.9519653"
+
+      - name: Build release APK
         run: gradle --no-daemon :app:assembleRelease
 
       - name: Upload APK artifacts
