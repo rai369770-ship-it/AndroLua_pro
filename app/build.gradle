@@ -16,25 +16,14 @@ android {
         }
     }
 
-    signingConfigs {
-        release {
-            def releaseStoreFile = System.getenv("RELEASE_STORE_FILE") ?: "src/main/assets/keys/keystore.ks"
-            def releaseStorePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: ""
-            def releaseKeyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: ""
-            def releaseKeyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: ""
-            storeFile file(releaseStoreFile)
-            storePassword releaseStorePassword
-            keyAlias releaseKeyAlias
-            keyPassword releaseKeyPassword
-        }
-    }
+    // 🔴 Signing config removed (not needed for CI)
 
     buildTypes {
         release {
             minifyEnabled true
             shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.txt'
-            signingConfig signingConfigs.release
+            // ❌ signingConfig removed
         }
         debug {
             debuggable true
@@ -49,7 +38,13 @@ android {
 
     packaging {
         resources {
-            excludes += ['META-INF/NOTICE', 'META-INF/LICENSE', 'META-INF/LICENSE.txt', 'META-INF/NOTICE.txt', 'META-INF/proguard/androidx-annotations.pro']
+            excludes += [
+                'META-INF/NOTICE',
+                'META-INF/LICENSE',
+                'META-INF/LICENSE.txt',
+                'META-INF/NOTICE.txt',
+                'META-INF/proguard/androidx-annotations.pro'
+            ]
         }
     }
 
@@ -66,10 +61,13 @@ dependencies {
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
     implementation 'com.google.android.material:material:1.12.0'
+
     implementation 'androidx.camera:camera-core:1.4.1'
     implementation 'androidx.camera:camera-camera2:1.4.1'
     implementation 'androidx.camera:camera-lifecycle:1.4.1'
+
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.squareup.okio:okio:3.9.1'
+
     implementation 'androidx.media3:media3-exoplayer:1.5.1'
 }
