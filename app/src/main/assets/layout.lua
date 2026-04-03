@@ -35,57 +35,57 @@ layout={
       paddingLeft=20,
       {
         TextView,
-        text="脚本路径"
+        text="Script path"
       },
       {
-        EditText,
+        androidx.appcompat.widget.AppCompatEditText,
         id="luaPath",
         layout_width="fill",
         singleLine=true,
       },
       {
         TextView,
-        text="包名称"
+        text="Package name"
       },
       {
-        EditText,
+        androidx.appcompat.widget.AppCompatEditText,
         id="packageName",
         layout_width="fill",
         singleLine=true,
       },
       {
         TextView,
-        text="程序名称"
+        text="App name"
       },
       {
-        EditText,
+        androidx.appcompat.widget.AppCompatEditText,
         id="appName",
         layout_width="fill",
         singleLine=true,
       },
       {
         TextView,
-        text="程序版本"
+        text="App version"
       },
       {
-        EditText,
+        androidx.appcompat.widget.AppCompatEditText,
         id="appVer",
         layout_width="fill",
         singleLine=true,
       },
       {
         TextView,
-        text="apk路径"
+        text="APK path"
       },
       {
-        EditText,
+        androidx.appcompat.widget.AppCompatEditText,
         id="apkPath",
         layout_width="fill",
         singleLine=true,
       },
       {
         TextView,
-        text="打包使用debug签名",
+        text="Debug signing for package build",
         id="status"
       },
     }
@@ -101,10 +101,10 @@ layout={
       padding="10dp",
       {
         TextView,
-        text="程序名称"
+        text="App name"
       },
       {
-        EditText,
+        androidx.appcompat.widget.AppCompatEditText,
         id="project_appName",
         text="demo",
         layout_width="fill",
@@ -112,10 +112,10 @@ layout={
       },
       {
         TextView,
-        text="包名称"
+        text="Package name"
       },
       {
-        EditText,
+        androidx.appcompat.widget.AppCompatEditText,
         id="project_packageName",
         text="com.androlua.demo",
         layout_width="fill",
@@ -127,7 +127,7 @@ layout={
     LinearLayout;
     orientation="vertical";
     {
-      EditText;
+      androidx.appcompat.widget.AppCompatEditText;
       layout_width="fill";
       id="open_edit";
     };

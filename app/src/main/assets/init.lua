@@ -1,4 +1,4 @@
-appname="AndroLua+"
+appname="Androlua professional"
 appver="1.0"
 app_key="4yCilmN24RCRG82uc93kSZ1F"
 app_channel="github"

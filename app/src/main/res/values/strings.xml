@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="accsibility_service_description">辅助功能</string>
+    <string name="app_name">Androlua professional</string>
+    <string name="accsibility_service_description">Accessibility service</string>
+    <string name="about_title">About Androlua professional</string>
+    <string name="about_body">Androlua professional is a modern replacement of old androlua. Androlua professional is designed to support the modern android changes.</string>
 </resources>

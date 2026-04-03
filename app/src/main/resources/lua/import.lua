@@ -144,6 +144,13 @@ local function env_import(env)
     append(packages, 'java.lang.')
     append(packages, 'java.util.')
     append(packages, 'com.androlua.')
+    append(packages, 'androidx.appcompat.widget.')
+    append(packages, 'androidx.core.content.')
+    append(packages, 'androidx.recyclerview.widget.')
+    append(packages, 'androidx.camera.core.')
+    append(packages, 'androidx.media3.exoplayer.')
+    append(packages, 'okhttp3.')
+    append(packages, 'okio.')
 
     local function import_1(classname)
         for i, p in ipairs(packages) do
@@ -210,6 +217,10 @@ end
 
 function _M.compile(name)
     append(dexes, luacontext.loadDex(name))
+end
+
+function _M.bind(classname)
+    return import_class(classname) or import_dex_class(classname)
 end
 
 
