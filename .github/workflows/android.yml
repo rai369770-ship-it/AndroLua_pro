@@ -30,6 +30,11 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.14.3
+
+      - name: Regenerate Gradle wrapper
+        run: gradle wrapper --gradle-version 8.14.3
 
       - name: Make gradlew executable
         run: chmod +x gradlew
