@@ -2,12 +2,12 @@ apply plugin: 'com.android.application'
 
 android {
     namespace 'com.androlua'
-    compileSdk 34
+    compileSdk 35
 
     defaultConfig {
         applicationId "com.androlua"
         minSdk 24
-        targetSdk 34
+        targetSdk 35
         versionCode 4402
         versionName "4.4.2"
 
