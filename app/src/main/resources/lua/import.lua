@@ -8,6 +8,8 @@ luajava.imported = imported
 local _G = _G
 local insert = table.insert
 local bindClass = luajava.bindClass
+local Class = luajava.bindClass("java.lang.Class")
+local Thread = luajava.bindClass("java.lang.Thread")
 local dexes = {}
 local _M = {}
 local luacontext = activity or service
@@ -92,11 +94,50 @@ local function bind_dex_class(packagename)
             return class
         end
     end
+
+    local ok_ctx, ctx_loader = pcall(function()
+        return luacontext.getClassLoader()
+    end)
+    if ok_ctx and ctx_loader then
+        local ok, class = pcall(ctx_loader.loadClass, ctx_loader, packagename)
+        if ok and class then
+            loaded[packagename] = class
+            return class
+        end
+    end
+
+    local ok_thread, thread_loader = pcall(function()
+        return Thread.currentThread().getContextClassLoader()
+    end)
+    if ok_thread and thread_loader then
+        local ok, class = pcall(thread_loader.loadClass, thread_loader, packagename)
+        if ok and class then
+            loaded[packagename] = class
+            return class
+        end
+    end
+
+    local ok_cls, cls = pcall(Class.forName, packagename)
+    if ok_cls and cls then
+        loaded[packagename] = cls
+        return cls
+    end
 end
 
 local function import_class(packagename)
     packagename = massage_classname(packagename)
-    return loaded[packagename] or bind_class(packagename) or bind_dex_class(packagename)
+    local class = loaded[packagename] or bind_class(packagename) or bind_dex_class(packagename)
+    if class then
+        return class
+    end
+
+    local alias = packagename:gsub("%$", "_")
+    if alias ~= packagename then
+        class = loaded[alias] or bind_class(alias) or bind_dex_class(alias)
+        if class then
+            return class
+        end
+    end
 end
 
 
@@ -184,7 +225,10 @@ local function env_import(env)
         'android.',
         'android.view.',
         'android.widget.',
+        'androidx.',
+        'androidx.appcompat.',
         'androidx.appcompat.widget.',
+        'androidx.core.',
         'androidx.core.content.',
         'androidx.recyclerview.widget.',
         'androidx.camera.core.',
@@ -547,5 +591,3 @@ end
 setmetatable(luajava, luajava_mt)
 
 return env_import
-
-

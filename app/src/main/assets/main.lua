@@ -255,9 +255,6 @@ m = {
         title = "Manual",
         id = "more_manual", },
       { MenuItem,
-        title = "Contact",
-        id = "more_qq", },
-      { MenuItem,
         title = "About",
         id = "more_about", },
     },
@@ -805,11 +802,20 @@ func.play = function()
         return
     end
     save()
+    local runPath
     if luaproject then
-        activity.newActivity(luaproject .. "main.lua")
+        runPath = luaproject .. "main.lua"
     else
-        activity.newActivity(luapath)
+        runPath = luapath
     end
+
+    if not File(runPath).exists() then
+        local filename = tostring(runPath):match("([^/]+)$") or tostring(runPath)
+        Toast.makeText(activity, filename .. " not found", Toast.LENGTH_SHORT).show()
+        return
+    end
+
+    activity.newActivity(runPath)
 end
 func.undo = function()
     editor.undo()
@@ -1022,7 +1028,6 @@ function onMenuItemSelected(id, item)
         [optmenu.more_logcat] = func.logcat,
         [optmenu.more_java] = func.java,
         [optmenu.more_manual] = func.manual,
-        [optmenu.more_qq] = func.qq,
         [optmenu.more_about] = func.about,
     }
 end
@@ -1358,6 +1363,8 @@ end
 
 function showMoreActions(view)
     local popup = PopupMenu(activity, view)
+    local heading = popup.Menu.add("More options")
+    heading.setEnabled(false)
     popup.Menu.add("Options")
     popup.Menu.add("Select all")
     popup.Menu.add("Copy")
@@ -1394,7 +1401,7 @@ function addActionButton(text, onClick)
     action_bar.addView(btn)
 end
 
-addActionButton("More", function(v) showMoreActions(v) end)
+addActionButton("Options", function(v) showMoreActions(v) end)
 addActionButton("Save", function() func.save() end)
 addActionButton("Share", function() shareCurrentFile() end)
 addActionButton("About", function() func.about() end)
@@ -1503,5 +1510,3 @@ function onKeyShortcut(keyCode, event)
 end
 return false;
 end
-
-
