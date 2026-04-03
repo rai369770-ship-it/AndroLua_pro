@@ -18,6 +18,8 @@
 #include "luv.h"
 #ifdef _WIN32
 #include <process.h>
+#else
+#include <unistd.h>
 #endif
 
 static int luv_guess_handle(lua_State* L) {
