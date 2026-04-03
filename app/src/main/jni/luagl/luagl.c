@@ -721,7 +721,7 @@ static int luagl_hint(lua_State *L)
 /*InitNames () -> none*/
 static int luagl_init_names(lua_State *L)
 {
-  glInitNames();
+  luaL_error(L, "glInitNames is not supported in OpenGL ES");
   return 0;
 }
 
