@@ -47,7 +47,6 @@ By continuing, you agree to these terms.
     dlg.setMessage(msg)
     dlg.setPositiveButton("OK", nil)
     dlg.setNegativeButton("Close", nil)
-    dlg.setNeutralButton("Support", { onClick = func.donation })
     dlg.show()
 end
 
@@ -241,9 +240,6 @@ m = {
         title = "Symbols",
         id = "goto_func", },
     },
-    { MenuItem,
-      title = "Plugins...",
-      id = "plugin", },
     { SubMenu,
       title = "More...",
       { MenuItem,
@@ -259,10 +255,7 @@ m = {
         title = "Manual",
         id = "more_manual", },
       { MenuItem,
-        title = "Support developer",
-        id = "more_donation", },
-      { MenuItem,
-        title = "Contact developer",
+        title = "Contact",
         id = "more_qq", },
       { MenuItem,
         title = "About",
@@ -309,7 +302,7 @@ function create_project()
 
     end
     luadir = luaprojectdir .. appname .. "/"
-    write(luadir .. "init.lua", string.format("appname=\"%s\"\nappver=\"1.0\"\npackagename=\"%s\"\n%s", appname, packagename, upcode))
+    write(luadir .. "init.lua", string.format("appname=\"%s\"\nappver=\"1.0\"\npackagename=\"%s\"\nappcode=1\n%s", appname, packagename, upcode))
     write(luadir .. "main.lua", pcode)
     write(luadir .. "layout.aly", lcode)
     --project_dlg.hide()
@@ -887,13 +880,36 @@ func.build = function()
         Toast.makeText(activity, "Project build only.", Toast.LENGTH_SHORT ).show()
         return
     end
-    bin(luaproject .. "/")
+    create_build_dlg()
+    luaPath.setText(luaproject)
+    local project = {}
+    pcall(loadfile(luaproject .. "init.lua", "bt", project))
+    appName.setText(project.appname or "AndroLua Professional")
+    appVer.setText(project.appver or "1.0")
+    packageName.setText(project.packagename or "com.ssteam.androluaprofessional")
+    apkPath.setText(activity.getLuaExtPath("bin", (project.appname or "app") .. "_" .. (project.appver or "1.0") .. ".apk"))
+    status.setText("Build status: ready")
+    build_dlg.show()
 end
 
 buildfile = function()
+    local projectPath = luaPath.getText().toString()
+    local pkg = packageName.getText().toString()
+    local app = appName.getText().toString()
+    local ver = appVer.getText().toString()
+    local out = apkPath.getText().toString()
+
+    if #projectPath == 0 or #pkg == 0 or #app == 0 or #ver == 0 or #out == 0 then
+        Toast.makeText(activity, "Please complete all build fields.", Toast.LENGTH_SHORT).show()
+        return
+    end
+
+    status.setText("Build status: running")
     Toast.makeText(activity, "Building APK...", Toast.LENGTH_SHORT ).show()
-    task(bin, luaPath.getText().toString(), appName.getText().toString(), appVer.getText().toString(), packageName.getText().toString(), apkPath.getText().toString(), function(s)
-        status.setText(s or "APK build failed!")
+    task(bin, projectPath, app, ver, pkg, out, function(msg)
+        local result = msg or "Build failed"
+        status.setText("Build status: " .. result)
+        Toast.makeText(activity, result, Toast.LENGTH_SHORT).show()
     end)
 end
 
@@ -950,23 +966,32 @@ func.qq = function()
 end
 
 func.about = function()
-    local message = "Androlua professional is a modern replacement of old androlua. Androlua professional is designed to support the modern android changes.\n\nDeveloper:\nSujan Rai and ssteam.\n\nHelp and support\nDeveloper support."
+    local message = [[
+Welcome to AndroLua Professional.
+
+This edition is focused on modern Android compatibility, stable Lua import behavior, stronger project tooling, and an improved editing workflow for daily development.
+
+Highlights:
+- Better compatibility with AndroidX and modern libraries.
+- Improved APK build workflow from project settings.
+- Faster coding flow with quick action controls.
+- Cleaner and more consistent editor experience.
+
+Created by: Sujan Rai and SSteam.
+Contact: sujanrai8448@gmail.com
+]]
     local aboutDlg = AlertDialogBuilder(activity)
-    aboutDlg.setTitle("About Androlua professional")
+    aboutDlg.setTitle("Welcome to AndroLua Professional")
     aboutDlg.setMessage(message)
     aboutDlg.setPositiveButton("Close", nil)
-    aboutDlg.setNeutralButton("Contact on WhatsApp", { onClick = function() activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/9779708340992"))) end })
-    aboutDlg.setNegativeButton("Contact through email", { onClick = function() activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("mailto:sujanrai8448@gmail.com"))) end })
+    aboutDlg.setNeutralButton("WhatsApp", { onClick = function() activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/9779708340992"))) end })
+    aboutDlg.setNegativeButton("Email", { onClick = function() activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("mailto:sujanrai8448@gmail.com"))) end })
     aboutDlg.show()
 end
 
 func.fiximport = function()
     save()
     activity.newActivity("javaapi/fiximport", { luaproject, luapath })
-end
-
-func.plugin = function()
-    activity.newActivity("plugin/main", { luaproject, luapath })
 end
 
 function onMenuItemSelected(id, item)
@@ -997,10 +1022,8 @@ function onMenuItemSelected(id, item)
         [optmenu.more_logcat] = func.logcat,
         [optmenu.more_java] = func.java,
         [optmenu.more_manual] = func.manual,
-        [optmenu.more_donation] = func.donation,
         [optmenu.more_qq] = func.qq,
         [optmenu.more_about] = func.about,
-        [optmenu.plugin] = func.plugin,
     }
 end
 
@@ -1319,35 +1342,62 @@ function onKeyDown(e)
         end
     end
 end
-local cd1 = ColorDrawable(0x00ffffff)
-local cd2 = ColorDrawable(0x88000088)
-
-local pressed = android.R.attr.state_pressed;
-local window_focused = android.R.attr.state_window_focused;
-local focused = android.R.attr.state_focused;
-local selected = android.R.attr.state_selected;
-
-function click(v)
-    editor.paste(v.Text)
+function shareCurrentFile()
+    save()
+    local target = File(luapath)
+    if not target.exists() then
+        Toast.makeText(activity, "File does not exist.", Toast.LENGTH_SHORT).show()
+        return
+    end
+    local intent = Intent(Intent.ACTION_SEND)
+    intent.setType("text/plain")
+    intent.putExtra(Intent.EXTRA_STREAM, activity.getUriForFile(target))
+    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    activity.startActivity(Intent.createChooser(intent, "Share file"))
 end
 
-function newButton(text)
-    local sd = StateListDrawable()
-    sd.addState({ pressed }, cd2)
-    sd.addState({ 0 }, cd1)
-    local btn = TextView()
-    btn.TextSize = 20;
-    local pd = btn.TextSize / 2
-    btn.setPadding(pd, pd / 2, pd, pd / 4)
-    btn.Text = text
-    btn.setBackgroundDrawable(sd)
-    btn.onClick = click
-    return btn
+function showMoreActions(view)
+    local popup = PopupMenu(activity, view)
+    popup.Menu.add("Options")
+    popup.Menu.add("Select all")
+    popup.Menu.add("Copy")
+    popup.Menu.add("Cut")
+    popup.Menu.add("Paste")
+    popup.setOnMenuItemClickListener(PopupMenu.OnMenuItemClickListener{
+      onMenuItemClick=function(item)
+        local t = tostring(item.Title)
+        if t == "Options" then
+          Toast.makeText(activity, "Options opened", Toast.LENGTH_SHORT).show()
+        elseif t == "Select all" then
+          editor.selectAll()
+          Toast.makeText(activity, "Selected all", Toast.LENGTH_SHORT).show()
+        elseif t == "Copy" then
+          editor.copy()
+          Toast.makeText(activity, "Copied", Toast.LENGTH_SHORT).show()
+        elseif t == "Cut" then
+          editor.cut()
+          Toast.makeText(activity, "Cut", Toast.LENGTH_SHORT).show()
+        elseif t == "Paste" then
+          editor.paste()
+          Toast.makeText(activity, "Pasted", Toast.LENGTH_SHORT).show()
+        end
+        return true
+      end
+    })
+    popup.show()
 end
-local ps = { "(", ")", "[", "]", "{", "}", "\"", "=", ":", ".", ",", "_", "+", "-", "*", "/", "\\", "%", "#", "^", "$", "?", "&", "|", "<", ">", "~", ";", "'" };
-for k, v in ipairs(ps) do
-    ps_bar.addView(newButton(v))
+
+function addActionButton(text, onClick)
+    local btn = Button(activity)
+    btn.setText(text)
+    btn.onClick = onClick
+    action_bar.addView(btn)
 end
+
+addActionButton("More", function(v) showMoreActions(v) end)
+addActionButton("Save", function() func.save() end)
+addActionButton("Share", function() shareCurrentFile() end)
+addActionButton("About", function() func.about() end)
 
 local function adds()
     require "import"

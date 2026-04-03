@@ -3,96 +3,84 @@ layout={
     LinearLayout,
     layout_width="fill",
     layout_height="fill",
-    orientation="vertical";
+    orientation="vertical",
     {
       LuaEditor,
       id="editor",
-      text= "",
+      text="",
       layout_width="fill",
-      layout_height="fill",
-      layout_weight=1 ,
-      --gravity="top"
+      layout_height="0dp",
+      layout_weight=1,
     },
     {
-      HorizontalScrollView;
+      HorizontalScrollView,
+      layout_width="fill",
       horizontalScrollBarEnabled=false,
       {
-        LinearLayout;
-        id="ps_bar";
-        layout_width="fill";
-      };
-      layout_width="fill";
-    };
+        LinearLayout,
+        id="action_bar",
+        orientation="horizontal",
+        layout_width="wrap_content",
+        layout_height="wrap_content",
+        padding="8dp",
+      },
+    },
   },
 
   build={
-    ScrollView ,
+    ScrollView,
     layout_width="fill",
     {
       LinearLayout,
       orientation=1,
       layout_width="fill",
-      paddingLeft=20,
+      padding="16dp",
       {
-        TextView,
-        text="Script path"
-      },
-      {
-        "androidx.appcompat.widget.AppCompatEditText",
+        EditText,
         id="luaPath",
+        hint="Project path",
         layout_width="fill",
         singleLine=true,
       },
       {
-        TextView,
-        text="Package name"
-      },
-      {
-        "androidx.appcompat.widget.AppCompatEditText",
+        EditText,
         id="packageName",
+        hint="Package name",
         layout_width="fill",
         singleLine=true,
       },
       {
-        TextView,
-        text="App name"
-      },
-      {
-        "androidx.appcompat.widget.AppCompatEditText",
+        EditText,
         id="appName",
+        hint="App name",
         layout_width="fill",
         singleLine=true,
       },
       {
-        TextView,
-        text="App version"
-      },
-      {
-        "androidx.appcompat.widget.AppCompatEditText",
+        EditText,
         id="appVer",
+        hint="Version",
         layout_width="fill",
         singleLine=true,
       },
       {
-        TextView,
-        text="APK path"
-      },
-      {
-        "androidx.appcompat.widget.AppCompatEditText",
+        EditText,
         id="apkPath",
+        hint="Output APK path",
         layout_width="fill",
         singleLine=true,
       },
       {
         TextView,
-        text="Debug signing for package build",
-        id="status"
+        id="status",
+        text="Build status: idle",
+        layout_marginTop="10dp",
       },
     }
   },
 
   project={
-    ScrollView ,
+    ScrollView,
     layout_width="fill",
     {
       LinearLayout,
@@ -100,43 +88,35 @@ layout={
       layout_width="fill",
       padding="10dp",
       {
-        TextView,
-        text="App name"
-      },
-      {
-        "androidx.appcompat.widget.AppCompatEditText",
+        EditText,
         id="project_appName",
+        hint="App name",
         text="demo",
         layout_width="fill",
         singleLine=true,
       },
       {
-        TextView,
-        text="Package name"
-      },
-      {
-        "androidx.appcompat.widget.AppCompatEditText",
+        EditText,
         id="project_packageName",
-        text="com.androlua.demo",
+        hint="Package name",
+        text="com.ssteam.androluaprofessional.demo",
         layout_width="fill",
         singleLine=true,
       },
     }
   },
   open2={
-    LinearLayout;
-    orientation="vertical";
+    LinearLayout,
+    orientation="vertical",
     {
-      "androidx.appcompat.widget.AppCompatEditText";
-      layout_width="fill";
-      id="open_edit";
-    };
+      EditText,
+      layout_width="fill",
+      id="open_edit",
+    },
     {
-      ListView;
-      layout_width="fill";
-      id="listview2";
-    };
-  };
-
-
+      ListView,
+      layout_width="fill",
+      id="listview2",
+    },
+  },
 }
