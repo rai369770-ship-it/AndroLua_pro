@@ -17,9 +17,9 @@ import android.net.Uri.Builder;
 import android.os.Environment;
 import android.os.ParcelFileDescriptor;
 import android.os.Build.VERSION;
-import android.support.annotation.GuardedBy;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.GuardedBy;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import android.text.TextUtils;
 import android.webkit.MimeTypeMap;
 

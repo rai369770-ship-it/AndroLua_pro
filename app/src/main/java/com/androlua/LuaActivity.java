@@ -30,7 +30,7 @@ import android.os.IBinder;
 import android.os.Message;
 import android.os.StrictMode;
 import android.provider.MediaStore;
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 import android.text.style.ClickableSpan;
 import android.util.DisplayMetrics;
 import android.util.Log;
