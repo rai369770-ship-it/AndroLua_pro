@@ -10,6 +10,7 @@ import "android.text.method.*"
 import "android.net.*"
 import "android.content.*"
 import "android.graphics.drawable.*"
+import "androidx.appcompat.widget.AppCompatEditText"
 import "bin"
 import "autotheme"
 
@@ -801,12 +802,16 @@ function importx(path, tp)
     return out
 end
 
+local FILE_PICKER_REQ = 21001
+
 func = {}
 func.open = function()
     save()
-    create_open_dlg()
-    list(listview, luadir)
-    open_dlg.show()
+    local pickerIntent = Intent(activity, LuaActivity)
+    pickerIntent.putExtra("luaPath", "filepicker")
+    pickerIntent.putExtra("title", "Open Lua File")
+    pickerIntent.putExtra("extensions", ".lua,.aly,.txt,.json,.xml,.gradle,.md")
+    activity.startActivityForResult(pickerIntent, FILE_PICKER_REQ)
 end
 func.new = function()
     save()
@@ -1125,6 +1130,19 @@ function onResult(name, path)
 end
 
 function onActivityResult(req, res, intent)
+    if req == FILE_PICKER_REQ then
+        if res == 1 and intent then
+            local selectedPath = intent.getStringExtra("path")
+            if selectedPath and File(selectedPath).exists() then
+                luadir = selectedPath:gsub("[^/]+$", "")
+                read(selectedPath)
+                Toast.makeText(activity, "Open file: " .. selectedPath, Toast.LENGTH_SHORT).show()
+            else
+                Toast.makeText(activity, "File selection failed", Toast.LENGTH_SHORT).show()
+            end
+        end
+        return
+    end
     if res == 10000 then
         read(luapath)
         editorFormat()
