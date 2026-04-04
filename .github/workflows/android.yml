@@ -22,11 +22,13 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: ''
 
       - name: Install SDK + NDK
         run: |
           yes | sdkmanager --licenses
-          sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;25.2.9519653"
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;25.2.9519653"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -40,7 +42,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build debug APK
-        run: ./gradlew --no-daemon :app:assembleDebug
+        run: ./gradlew --no-daemon :app:ndkBuildAll :app:assembleDebug
 
       - name: Build release APK
         run: ./gradlew --no-daemon :app:assembleRelease

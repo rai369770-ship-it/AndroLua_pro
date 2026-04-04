@@ -3,6 +3,7 @@ apply plugin: 'com.android.application'
 android {
     namespace 'com.androlua'
     compileSdk 35
+    ndkVersion "25.2.9519653"
 
     defaultConfig {
         applicationId "com.ssteam.androluaprofessional"
@@ -54,6 +55,32 @@ android {
             path file('src/main/jni/Android.mk')
         }
     }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['src/main/libs']
+        }
+    }
+}
+
+def ndkBuildExecutable() {
+    def ndkHome = android.ndkDirectory?.absolutePath ?: System.getenv("ANDROID_NDK_HOME")
+    if (!ndkHome) {
+        throw new GradleException("Android NDK not found. Set ANDROID_NDK_HOME or install ndkVersion ${android.ndkVersion}.")
+    }
+    def cmd = org.gradle.internal.os.OperatingSystem.current().isWindows() ? "ndk-build.cmd" : "ndk-build"
+    return "${ndkHome}/${cmd}"
+}
+
+tasks.register("ndkBuildAll", Exec) {
+    group = "build"
+    description = "Builds all JNI modules from app/src/main/jni via ndk-build."
+    workingDir file("src/main/jni")
+    commandLine ndkBuildExecutable(), "-C", file("src/main/jni").absolutePath, "NDK_PROJECT_PATH=.", "APP_BUILD_SCRIPT=Android.mk", "NDK_APPLICATION_MK=Application.mk", "-j${Runtime.runtime.availableProcessors()}"
+}
+
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn(tasks.named("ndkBuildAll"))
 }
 
 dependencies {
@@ -69,6 +96,8 @@ dependencies {
     implementation 'androidx.camera:camera-camera2:1.4.1'
     implementation 'androidx.camera:camera-lifecycle:1.4.1'
     implementation 'androidx.camera:camera-view:1.4.1'
+    implementation 'androidx.camera:camera-video:1.4.1'
+    implementation 'androidx.camera:camera-extensions:1.4.1'
 
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
@@ -97,6 +126,8 @@ dependencies {
     implementation 'commons-codec:commons-codec:1.17.1'
 
     implementation 'androidx.media3:media3-exoplayer:1.4.1'
+    implementation 'androidx.media3:media3-ui:1.4.1'
+    implementation 'androidx.media3:media3-session:1.4.1'
 
     // Added: commonly used app architecture, networking, persistence, and utility libraries.
     implementation 'androidx.room:room-runtime:2.6.1'
