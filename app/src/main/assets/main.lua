@@ -1084,23 +1084,60 @@ func.qq = function()
 end
 
 func.about = function()
-    local message = [[
-Welcome to AndroLua Professional.
+    local aboutLayout = {
+        LinearLayout,
+        orientation = "vertical",
+        padding = "18dp",
+        layout_width = "fill",
+        layout_height = "wrap",
+        {
+            TextView,
+            text = "Welcome to AndroLua Professional",
+            textSize = "20sp",
+            textStyle = "bold",
+            textColor = textc,
+            layout_marginBottom = "10dp",
+        },
+        {
+            TextView,
+            text = "This edition focuses on modern Android compatibility, stable Lua import behavior, stronger project tooling, and an improved daily coding workflow.",
+            textSize = "15sp",
+            textColor = textc,
+            layout_marginBottom = "10dp",
+        },
+        {
+            TextView,
+            text = "Highlights:",
+            textStyle = "bold",
+            textSize = "15sp",
+            textColor = textc,
+        },
+        {
+            TextView,
+            text = "• Better compatibility with AndroidX and modern libraries.\n• Improved APK build workflow from project settings.\n• Faster coding flow with quick action controls.\n• Cleaner and more consistent editor experience.",
+            textSize = "14sp",
+            textColor = textc,
+            layout_marginTop = "6dp",
+            layout_marginBottom = "10dp",
+        },
+        {
+            TextView,
+            text = "Created by: Sujan Rai and SSteam",
+            textSize = "14sp",
+            textStyle = "bold",
+            textColor = textc,
+        },
+        {
+            TextView,
+            text = "Contact: sujanrai8448@gmail.com",
+            textSize = "14sp",
+            textColor = textc,
+        }
+    }
 
-This edition is focused on modern Android compatibility, stable Lua import behavior, stronger project tooling, and an improved editing workflow for daily development.
-
-Highlights:
-- Better compatibility with AndroidX and modern libraries.
-- Improved APK build workflow from project settings.
-- Faster coding flow with quick action controls.
-- Cleaner and more consistent editor experience.
-
-Created by: Sujan Rai and SSteam.
-Contact: sujanrai8448@gmail.com
-]]
     local aboutDlg = LuaDialog(activity)
-    aboutDlg.setTitle("Welcome to AndroLua Professional")
-    aboutDlg.setMessage(message)
+    aboutDlg.setTitle("About")
+    aboutDlg.setView(loadlayout(aboutLayout))
     aboutDlg.setPositiveButton("Close", nil)
     aboutDlg.setNeutralButton("WhatsApp", { onClick = function() activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/9779708340992"))) end })
     aboutDlg.setNegativeButton("Email", { onClick = function() activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("mailto:sujanrai8448@gmail.com"))) end })
