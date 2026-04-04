@@ -353,6 +353,9 @@ public class LuaService extends Service implements LuaContext,LuaBroadcastReceiv
 	}
 
 	public LuaAsyncTask newTask(LuaObject func, LuaObject update, LuaObject callback) throws LuaException {
+		if (func == null || func.isNil()) {
+			throw new LuaException("newTask requires a Lua function, got nil.");
+		}
 		return new LuaAsyncTask(this, func, update, callback);
 	}
 

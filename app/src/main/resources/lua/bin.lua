@@ -390,6 +390,10 @@ local function bin(path)
     local p = {}
     local e, s = pcall(loadfile(path .. "init.lua", "bt", p))
     if e then
+        if type(binapk) ~= "function" then
+            Toast.makeText(activity, "Build task loader error: binapk is invalid.", Toast.LENGTH_SHORT).show()
+            return
+        end
         activity.newTask(binapk, update, callback).execute { path, activity.getLuaExtPath("bin", p.appname .. "_" .. p.appver .. ".apk") }
     else
         Toast.makeText(activity, "Project config file error: " .. s, Toast.LENGTH_SHORT).show()

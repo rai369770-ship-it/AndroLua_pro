@@ -59,6 +59,9 @@ public class LuaAsyncTask extends AsyncTaskX implements LuaGcable {
 	public LuaAsyncTask(LuaContext luaContext, LuaObject func, LuaObject callback) throws LuaException {
 		luaContext.regGc(this);
 		mLuaContext = luaContext;
+		if (func == null || func.isNil()) {
+			throw new LuaException("newTask requires a Lua function, got nil.");
+		}
 		mBuffer = func.dump();
 		mCallback = callback;
 		LuaState l=func.getLuaState();
@@ -72,6 +75,9 @@ public class LuaAsyncTask extends AsyncTaskX implements LuaGcable {
 	public LuaAsyncTask(LuaContext luaContext, LuaObject func, LuaObject update, LuaObject callback) throws LuaException {
 		luaContext.regGc(this);
 		mLuaContext = luaContext;
+		if (func == null || func.isNil()) {
+			throw new LuaException("newTask requires a Lua function, got nil.");
+		}
 		mBuffer = func.dump();
 		mUpdate = update;
 		mCallback = callback;
@@ -245,4 +251,3 @@ public class LuaAsyncTask extends AsyncTaskX implements LuaGcable {
 	}
 
 }
-
