@@ -89,8 +89,7 @@ local function libsloader(name)
         end
     end
 
-    return "
-	no native library for " .. name .. " (tried local libs and package.cpath)"
+    return "\n\tno native library for " .. name .. " (tried local libs and package.cpath)"
 end
 
 append_unique(package.searchers, libsloader)
@@ -388,12 +387,10 @@ function _M.dump(o)
                 table.insert(t, '{')
                 for k, v in pairs(value) do
                     if v == _G then
-                        table.insert(t, string.format('
-%s%s	=%s ;', string.rep(space, deep - 1), k, "_G"))
+                        table.insert(t, string.format('\n%s%s\t=%s ;', string.rep(space, deep - 1), k, "_G"))
                     elseif v ~= package.loaded then
                         local key = tonumber(k) and string.format('[%s]', k) or string.format('["%s"]', k)
-                        table.insert(t, string.format('
-%s%s	= ', string.rep(space, deep - 1), key))
+                        table.insert(t, string.format('\n%s%s\t= ', string.rep(space, deep - 1), key))
                         if v == NIL then
                             table.insert(t, 'nil ;')
                         elseif type(v) == 'table' then
@@ -410,8 +407,7 @@ function _M.dump(o)
                         end
                     end
                 end
-                table.insert(t, string.format('
-%s}', string.rep(space, deep - 1)))
+                table.insert(t, string.format('\n%s}', string.rep(space, deep - 1)))
                 deep = deep - 2
             end
         else
