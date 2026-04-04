@@ -13,7 +13,6 @@ import "java.io.BufferedOutputStream"
 import "java.util.zip.ZipInputStream"
 import "java.io.BufferedInputStream"
 import "java.util.zip.ZipEntry"
-import "android.app.ProgressDialog"
 import "java.util.zip.CheckedOutputStream"
 import "java.util.zip.Adler32"
 
@@ -31,20 +30,12 @@ local function callback(s)
         bin_dlg.hide()
         bin_dlg.Message = ""
     end
+    s = tostring(s or "Build failed")
     if not s:find("success") then
         create_error_dlg2()
         error_dlg.Message = s
         error_dlg.show()
     end
-end
-
-local function create_bin_dlg()
-    if bin_dlg then
-        return
-    end
-    bin_dlg = ProgressDialog(activity);
-    bin_dlg.setTitle("Building APK");
-    bin_dlg.setMax(100);
 end
 
 create_error_dlg2 = function()
