@@ -17,21 +17,16 @@ import "android.app.ProgressDialog"
 import "java.util.zip.CheckedOutputStream"
 import "java.util.zip.Adler32"
 
-local bin_dlg, error_dlg, create_error_dlg2
+local bin_dlg, error_dlg
 local function update(s)
-    if bin_dlg then
-        bin_dlg.setMessage(s)
-    end
+    bin_dlg.setMessage(s)
 end
 
 local function callback(s)
     LuaUtil.rmDir(File(activity.getLuaExtDir("bin/.temp")))
-    if bin_dlg then
-        bin_dlg.hide()
-        bin_dlg.Message = ""
-    end
+    bin_dlg.hide()
+    bin_dlg.Message = ""
     if not s:find("success") then
-        create_error_dlg2()
         error_dlg.Message = s
         error_dlg.show()
     end
@@ -42,11 +37,11 @@ local function create_bin_dlg()
         return
     end
     bin_dlg = ProgressDialog(activity);
-    bin_dlg.setTitle("Building APK");
+    bin_dlg.setTitle("Packaging APK")
     bin_dlg.setMax(100);
 end
 
-create_error_dlg2 = function()
+local function create_error_dlg2()
     if error_dlg then
         return
     end
@@ -236,7 +231,7 @@ local function binapk(luapath, apkpath)
     end
 
 
-    this.update("Compiling...");
+    this.update("Compiling...")
     if f.isDirectory() then
         require "permission"
         dofile(luapath .. "init.lua")
@@ -295,7 +290,7 @@ local function binapk(luapath, apkpath)
         return table.concat(uint)
     end
 
-    this.update("Packaging...");
+    this.update("Packaging...")
     local entry = zis.getNextEntry();
     while entry do
         local name = entry.getName()
@@ -363,7 +358,7 @@ local function binapk(luapath, apkpath)
     out.close()
 
     if #errbuffer == 0 then
-        this.update("Signing...");
+        this.update("Signing...")
         os.remove(apkpath)
         Signer.sign(tmp, apkpath)
         os.remove(tmp)
@@ -376,7 +371,7 @@ local function binapk(luapath, apkpath)
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         this.update("Opening...");
         activity.startActivityForResult(i, 0);]]
-        return "Build success: " .. apkpath
+        return "Build success:" .. apkpath
     else
         os.remove(tmp)
         this.update("Build failed:\n " .. table.concat(errbuffer, "\n"));
@@ -390,13 +385,12 @@ local function bin(path)
     local p = {}
     local e, s = pcall(loadfile(path .. "init.lua", "bt", p))
     if e then
-        if type(binapk) ~= "function" then
-            Toast.makeText(activity, "Build task loader error: binapk is invalid.", Toast.LENGTH_SHORT).show()
-            return
-        end
+        create_error_dlg2()
+        create_bin_dlg()
+        bin_dlg.show()
         activity.newTask(binapk, update, callback).execute { path, activity.getLuaExtPath("bin", p.appname .. "_" .. p.appver .. ".apk") }
     else
-        Toast.makeText(activity, "Project config file error: " .. s, Toast.LENGTH_SHORT).show()
+        Toast.makeText(activity, "Project configuration file error." .. s, Toast.LENGTH_SHORT).show()
     end
 end
 

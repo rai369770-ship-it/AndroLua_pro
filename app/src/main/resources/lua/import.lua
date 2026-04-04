@@ -51,6 +51,23 @@ local function normalize_luaopen(name)
     return (name or ""):gsub("%.", "_"):gsub("%-", "_")
 end
 
+local function get_native_search_dirs()
+    local dirs = {}
+    local project_dir = luajava.luadir
+    local runtime_dir = (luacontext and luacontext.getLuaDir and luacontext.getLuaDir()) or nil
+    append_unique(dirs, project_dir)
+    append_unique(dirs, runtime_dir)
+    append_unique(dirs, project_dir and (project_dir .. "/libs") or nil)
+    append_unique(dirs, runtime_dir and (runtime_dir .. "/libs") or nil)
+    append_unique(dirs, project_dir and (project_dir .. "/lib/armeabi-v7a") or nil)
+    append_unique(dirs, project_dir and (project_dir .. "/lib/armeavi-v7a") or nil)
+    append_unique(dirs, project_dir and (project_dir .. "/lib/armeabi") or nil)
+    append_unique(dirs, runtime_dir and (runtime_dir .. "/lib/armeabi-v7a") or nil)
+    append_unique(dirs, runtime_dir and (runtime_dir .. "/lib/armeavi-v7a") or nil)
+    append_unique(dirs, runtime_dir and (runtime_dir .. "/lib/armeabi") or nil)
+    return dirs
+end
+
 local function load_native_from(path, name)
     local module_name = normalize_luaopen(name)
     local root_name = module_name:match("^[^_]+") or module_name
@@ -74,6 +91,13 @@ local function libsloader(name)
     end
 
     local so_name = "lib" .. (root or name) .. ".so"
+    for _, base in ipairs(get_native_search_dirs()) do
+        local loader = load_native_from(base .. "/" .. so_name, name)
+        if loader then
+            return loader
+        end
+    end
+
     for chunk in tostring(package.cpath or ""):gmatch("[^;]+") do
         local path = chunk:gsub("%?", root or name)
         local loader = load_native_from(path, name)
@@ -476,6 +500,37 @@ end
 
 function _M.getids()
     return luajava.ids
+end
+
+function _M.require_native(name)
+    local ok, lib = pcall(require, name)
+    if ok and lib ~= nil then
+        return lib
+    end
+    local root = name:match("^[%w_]+") or name
+    local so_name = "lib" .. root .. ".so"
+    local errs = {}
+    for _, base in ipairs(get_native_search_dirs()) do
+        local path = base .. "/" .. so_name
+        local loader = load_native_from(path, name)
+        if loader then
+            local ok_loader, ret = pcall(loader)
+            if ok_loader then
+                package.loaded[name] = ret == nil and true or ret
+                return package.loaded[name]
+            end
+            insert(errs, ret)
+        end
+    end
+    error("cannot load native module " .. tostring(name) .. ": " .. table.concat(errs, " | "), 2)
+end
+
+function _M.require_cjson()
+    local ok, mod = pcall(require, "cjson")
+    if ok and mod then
+        return mod
+    end
+    return _M.require_native("cjson")
 end
 
 local LuaAsyncTask = luajava.bindClass("com.androlua.LuaAsyncTask")
