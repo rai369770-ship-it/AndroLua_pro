@@ -624,6 +624,52 @@ function list2(v, p)
     plist = history
 end
 
+local function buildOpenFileEntries(path, query)
+    local current = File(path)
+    local entries = {}
+    local dirs = {}
+    local files = {}
+    local filter = tostring(query or ""):lower()
+
+    if path ~= "/" then
+        table.insert(entries, "../")
+    end
+
+    if current and current.exists() and current.isDirectory() then
+        local children = current.listFiles()
+        if children then
+            for i = 0, #children - 1 do
+                local child = children[i]
+                local name = child.getName()
+                local label = child.isDirectory() and (name .. "/") or name
+                if filter == "" or label:lower():find(filter, 1, true) then
+                    if child.isDirectory() then
+                        table.insert(dirs, label)
+                    elseif name:find("%.lua$") or name:find("%.aly$") or name:find("%.alp$") then
+                        table.insert(files, label)
+                    end
+                end
+            end
+        end
+    end
+
+    table.sort(dirs, sort)
+    table.sort(files, sort)
+    for _, item in ipairs(dirs) do
+        table.insert(entries, item)
+    end
+    for _, item in ipairs(files) do
+        table.insert(entries, item)
+    end
+    return entries
+end
+
+local function refreshOpenFilesList()
+    open_files_path.setText(luadir)
+    local items = buildOpenFileEntries(luadir, open_files_edit.Text)
+    open_files_list.setAdapter(adapter(items))
+end
+
 function export(pdir)
     require "import"
     import "java.util.zip.*"
@@ -825,16 +871,10 @@ function importx(path, tp)
     return out
 end
 
-local FILE_PICKER_REQ = 21001
-
 func = {}
 func.open = function()
     save()
-    local pickerIntent = Intent(activity, LuaActivity)
-    pickerIntent.putExtra("luaPath", "filepicker")
-    pickerIntent.putExtra("title", "Open Lua File")
-    pickerIntent.putExtra("extensions", ".lua,.aly,.txt,.json,.xml,.gradle,.md")
-    activity.startActivityForResult(pickerIntent, FILE_PICKER_REQ)
+    showOpenFilesDialog()
 end
 func.new = function()
     save()
@@ -1143,19 +1183,6 @@ function onResult(name, path)
 end
 
 function onActivityResult(req, res, intent)
-    if req == FILE_PICKER_REQ then
-        if res == 1 and intent then
-            local selectedPath = intent.getStringExtra("path")
-            if selectedPath and File(selectedPath).exists() then
-                luadir = selectedPath:gsub("[^/]+$", "")
-                read(selectedPath)
-                Toast.makeText(activity, "Open file: " .. selectedPath, Toast.LENGTH_SHORT).show()
-            else
-                Toast.makeText(activity, "File selection failed", Toast.LENGTH_SHORT).show()
-            end
-        end
-        return
-    end
     if res == 10000 then
         read(luapath)
         editorFormat()
@@ -1300,6 +1327,67 @@ function create_open_dlg()
 
     --open_dlg.setItems{"Empty"}
     --open_dlg.setContentView(listview)
+end
+
+function create_open_files_dlg()
+    if open_files_dlg then
+        return
+    end
+    open_files_dlg = LuaDialog(activity)
+    open_files_dlg.setTitle("Open Files")
+    open_files_dlg.setView(loadlayout(layout.open_files))
+    open_files_list.FastScrollEnabled = true
+
+    open_files_edit.addTextChangedListener {
+        onTextChanged = function()
+            refreshOpenFilesList()
+        end
+    }
+
+    open_files_list.setOnItemClickListener(AdapterView.OnItemClickListener {
+        onItemClick = function(parent, view, pos, id)
+            local selected = tostring(view.Text)
+            if selected == "../" then
+                luadir = luadir:match("(.-)[^/]+/$") or luadir
+                refreshOpenFilesList()
+                return
+            end
+
+            if selected:find("/$") then
+                luadir = luadir .. selected
+                refreshOpenFilesList()
+                return
+            end
+
+            local target = luadir .. selected
+            if selected:find("%.alp$") then
+                imports(target)
+            else
+                read(target)
+            end
+            open_files_dlg.hide()
+        end
+    })
+
+    open_files_list.onItemLongClick = function(parent, view, pos, id)
+        local selected = tostring(view.Text)
+        if selected == "../" then
+            return true
+        end
+        create_delete_dlg()
+        delete_dlg.setMessage(luadir .. selected)
+        delete_dlg.show()
+        return true
+    end
+
+    open_files_dlg.setNegativeButton("Close", nil)
+end
+
+function showOpenFilesDialog()
+    create_open_files_dlg()
+    open_files_edit.setText("")
+    refreshOpenFilesList()
+    open_files_dlg.show()
 end
 
 function create_open_dlg2()
