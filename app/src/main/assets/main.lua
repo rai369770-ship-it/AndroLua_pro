@@ -244,9 +244,6 @@ m = {
     { SubMenu,
       title = "More...",
       { MenuItem,
-        title = "Layout Helper",
-        id = "more_helper", },
-      { MenuItem,
         title = "Logcat",
         id = "more_logcat", },
       { MenuItem,
@@ -545,6 +542,31 @@ function open(p)
     end
 end
 
+local function rebuildRecentHistory()
+    local unique = {}
+    local cleaned = {}
+    for i = 1, #history do
+        local path = history[i]
+        if type(path) == "string" and #path > 0 and not unique[path] and File(path).exists() then
+            unique[path] = true
+            table.insert(cleaned, path)
+        end
+    end
+    history = cleaned
+end
+
+local function findRecentMatches(query)
+    local text = (query or ""):lower()
+    local matched = {}
+    for i = 1, #history do
+        local path = history[i]
+        if text == "" or path:lower():find(text, 1, true) then
+            table.insert(matched, path)
+        end
+    end
+    return matched
+end
+
 function sort(a, b)
     if string.lower(a) < string.lower(b) then
         return true
@@ -596,6 +618,7 @@ function list(v, p)
 end
 
 function list2(v, p)
+    rebuildRecentHistory()
     local adapter = ArrayListAdapter(activity, android.R.layout.simple_list_item_1, String(history))
     v.setAdapter(adapter)
     plist = history
@@ -822,10 +845,7 @@ end
 
 func.history = function()
     save()
-    create_open_dlg2()
-    list2(listview2)
-    open_edit.Text = ""
-    open_dlg2.show()
+    showRecentFilesDialog()
 end
 
 func.create = function()
@@ -997,12 +1017,6 @@ func.java = function()
 end
 
 
-func.helper = function()
-    save()
-    isupdate = true
-    activity.newActivity("layouthelper/main", { luaproject, luapath })
-end
-
 func.donation = function()
     xpcall(function()
         local url = "alipayqr://platformapi/startapp?saId=10000007&clientVersion=3.7.0.0718&qrcode=https://qr.alipay.com/apt7ujjb4jngmu3z9a"
@@ -1082,7 +1096,6 @@ function onMenuItemSelected(id, item)
         [optmenu.goto_line] = func.gotoline,
         [optmenu.goto_func] = func.navi,
         [optmenu.goto_seach] = func.seach,
-        [optmenu.more_helper] = func.helper,
         [optmenu.more_logcat] = func.logcat,
         [optmenu.more_java] = func.java,
         [optmenu.more_about] = func.about,
@@ -1250,6 +1263,15 @@ function create_delete_dlg()
     delete_dlg.setNegativeButton("Cancel", nil)
 end
 
+function create_recent_remove_dlg()
+    if recent_remove_dlg then
+        return
+    end
+    recent_remove_dlg = LuaDialog(activity)
+    recent_remove_dlg.setTitle("Remove From Recent")
+    recent_remove_dlg.setNegativeButton("Cancel", nil)
+end
+
 function create_open_dlg()
     if open_dlg then
         return
@@ -1287,7 +1309,7 @@ function create_open_dlg2()
     open_dlg2 = LuaDialog(activity)
     --open_dlg2.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
 
-    open_dlg2.setTitle("RecentOpen")
+    open_dlg2.setTitle("Recent Files")
     open_dlg2.setView(loadlayout(layout.open2))
 
     --listview2=open_dlg2.ListView
@@ -1297,34 +1319,55 @@ function create_open_dlg2()
 
     open_edit.addTextChangedListener {
         onTextChanged = function(c)
-            local s = tostring(c)
-            if #s == 0 then
-                listview2.setAdapter(adapter(plist))
-            end
-            local t = {}
-            s = s:lower()
-            for k, v in ipairs(plist) do
-                if v:lower():find(s, 1, true) then
-                    table.insert(t, v)
-                end
-            end
-            listview2.setAdapter(adapter(t))
+            local query = tostring(c)
+            plist = findRecentMatches(query)
+            listview2.setAdapter(adapter(plist))
         end
     }
 
     listview2.setOnItemClickListener(AdapterView.OnItemClickListener {
         onItemClick = function(parent, v, pos, id)
-            if File(v.Text).exists() then
-                luadir = v.Text:gsub("[^/]+$", "")
-                read(v.Text)
+            local selectedPath = tostring(v.Text)
+            if File(selectedPath).exists() then
+                luadir = selectedPath:gsub("[^/]+$", "")
+                read(selectedPath)
                 open_dlg2.hide()
             else
-                listview2.adapter.remove(pos)
-                table.remove(plist, id)
-                Toast.makeText(activity, "File does not exist", 1000).show()
+                rebuildRecentHistory()
+                listview2.setAdapter(adapter(findRecentMatches(open_edit.Text)))
+                Toast.makeText(activity, "File no longer exists.", Toast.LENGTH_SHORT).show()
             end
         end
     })
+
+    listview2.onItemLongClick = function(parent, view, pos, id)
+        local selectedPath = tostring(view.Text)
+        create_recent_remove_dlg()
+        recent_remove_dlg.setMessage(selectedPath)
+        recent_remove_dlg.setPositiveButton("Remove", {
+            onClick = function()
+                for i = #history, 1, -1 do
+                    if history[i] == selectedPath then
+                        table.remove(history, i)
+                    end
+                end
+                plist = findRecentMatches(open_edit.Text)
+                listview2.setAdapter(adapter(plist))
+                Toast.makeText(activity, "Removed from recent files.", Toast.LENGTH_SHORT).show()
+            end
+        })
+        recent_remove_dlg.show()
+        return true
+    end
+end
+
+function showRecentFilesDialog()
+    create_open_dlg2()
+    rebuildRecentHistory()
+    plist = findRecentMatches("")
+    listview2.setAdapter(adapter(plist))
+    open_edit.setText("")
+    open_dlg2.show()
 end
 
 function create_create_dlg()
@@ -1435,16 +1478,23 @@ function showMoreActions(view)
     local popup = PopupMenu(activity, view)
     local heading = popup.Menu.add("More options")
     heading.setEnabled(false)
-    popup.Menu.add("Options")
+    popup.Menu.add("Open files")
+    popup.Menu.add("Recent files")
+    popup.Menu.add("Save")
     popup.Menu.add("Select all")
     popup.Menu.add("Copy")
     popup.Menu.add("Cut")
     popup.Menu.add("Paste")
+    popup.Menu.add("Exit")
     popup.setOnMenuItemClickListener(PopupMenu.OnMenuItemClickListener{
       onMenuItemClick=function(item)
         local t = tostring(item.Title)
-        if t == "Options" then
-          Toast.makeText(activity, "Options opened", Toast.LENGTH_SHORT).show()
+        if t == "Open files" then
+          func.open()
+        elseif t == "Recent files" then
+          showRecentFilesDialog()
+        elseif t == "Save" then
+          func.save()
         elseif t == "Select all" then
           editor.selectAll()
           Toast.makeText(activity, "Selected all", Toast.LENGTH_SHORT).show()
@@ -1457,6 +1507,8 @@ function showMoreActions(view)
         elseif t == "Paste" then
           editor.onTextContextMenuItem(android.R.id.paste)
           Toast.makeText(activity, "Pasted", Toast.LENGTH_SHORT).show()
+        elseif t == "Exit" then
+          activity.finish()
         end
         return true
       end
