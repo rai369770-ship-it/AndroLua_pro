@@ -13,11 +13,11 @@ import "java.io.BufferedOutputStream"
 import "java.util.zip.ZipInputStream"
 import "java.io.BufferedInputStream"
 import "java.util.zip.ZipEntry"
-import "android.app.ProgressDialog"
 import "java.util.zip.CheckedOutputStream"
 import "java.util.zip.Adler32"
 
 local bin_dlg, error_dlg, create_error_dlg2
+
 local function update(s)
     if bin_dlg then
         bin_dlg.setMessage(s)
@@ -30,20 +30,12 @@ local function callback(s)
         bin_dlg.hide()
         bin_dlg.Message = ""
     end
+    s = tostring(s or "Build failed")
     if not s:find("success") then
         create_error_dlg2()
         error_dlg.Message = s
         error_dlg.show()
     end
-end
-
-local function create_bin_dlg()
-    if bin_dlg then
-        return
-    end
-    bin_dlg = ProgressDialog(activity);
-    bin_dlg.setTitle("Building APK");
-    bin_dlg.setMax(100);
 end
 
 create_error_dlg2 = function()
@@ -387,16 +379,31 @@ end
 --luabindir=activity.getLuaExtDir("bin")
 --print(activity.getLuaExtPath("bin","a"))
 local function bin(path)
+    local function post_toast(msg, duration)
+        if not activity then
+            return
+        end
+        local function show()
+            Toast.makeText(activity, tostring(msg), duration or Toast.LENGTH_SHORT).show()
+        end
+        if activity.runOnUiThread then
+            activity.runOnUiThread(show)
+        else
+            show()
+        end
+    end
+
     local p = {}
     local e, s = pcall(loadfile(path .. "init.lua", "bt", p))
     if e then
-        if type(binapk) ~= "function" then
-            Toast.makeText(activity, "Build task loader error: binapk is invalid.", Toast.LENGTH_SHORT).show()
+        local task_builder = p.binapk or binapk
+        if type(task_builder) ~= "function" then
+            post_toast("Build task loader error: binapk is invalid.")
             return
         end
-        activity.newTask(binapk, update, callback).execute { path, activity.getLuaExtPath("bin", p.appname .. "_" .. p.appver .. ".apk") }
+        activity.newTask(task_builder, update, callback).execute { path, activity.getLuaExtPath("bin", p.appname .. "_" .. p.appver .. ".apk") }
     else
-        Toast.makeText(activity, "Project config file error: " .. s, Toast.LENGTH_SHORT).show()
+        post_toast("Project config file error: " .. s)
     end
 end
 
