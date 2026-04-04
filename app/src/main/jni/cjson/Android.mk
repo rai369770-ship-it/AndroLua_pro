@@ -7,5 +7,5 @@ LOCAL_SRC_FILES := \
 	lua_cjson.c \
 	fpconv.c \
 	strbuf.c 
-LOCAL_STATIC_LIBRARIES := luajava
+LOCAL_SHARED_LIBRARIES := luajava
 include $(BUILD_SHARED_LIBRARY)

@@ -8,7 +8,7 @@ LOCAL_SRC_FILES  := md5lib.c \
 		md5.c \
 		compat-5.2.c
 		
-LOCAL_STATIC_LIBRARIES := luajava
+LOCAL_SHARED_LIBRARIES := luajava
 
 include $(BUILD_SHARED_LIBRARY)
 

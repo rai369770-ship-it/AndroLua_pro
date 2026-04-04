@@ -1,7 +1,15 @@
 local Http=luajava.bindClass "com.androlua.Http"
 local File=luajava.bindClass "java.io.File"
 local pairs,tostring,print,dump,xpcall=pairs,tostring,print,dump,xpcall
-local cjson=require "cjson"
+local cjson
+do
+  local ok_import, import_mod = pcall(require, "import")
+  if ok_import and type(import_mod) == "table" and type(import_mod.require_cjson) == "function" then
+    cjson = import_mod.require_cjson()
+  else
+    cjson = require "cjson"
+  end
+end
 local table=require "table"
 local string=require "string"
 local type=type
