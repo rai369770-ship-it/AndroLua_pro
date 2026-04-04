@@ -7,7 +7,7 @@ import "clayout"
 import "mlayout"
 import "autotheme"
 
-activity.Title="Java API浏览器"
+activity.Title="Java API Browser"
 activity.setTheme(autotheme())
 function adapter(t)
   local ls=ArrayList()
@@ -23,7 +23,7 @@ cm=activity.getSystemService(activity.CLIPBOARD_SERVICE)
 function copy(str)
   local cd = ClipData.newPlainText("label",str)
   cm.setPrimaryClip(cd)
-  Toast.makeText(activity,"已复制的剪切板",1000).show()
+  Toast.makeText(activity,"Copied to clipboard",1000).show()
 end
 
 
@@ -48,7 +48,7 @@ clist.onItemClick=function(l,v)
   super=super and " extends "..tostring(super.getName()) or ""
   table.insert(t,tostring(class)..super)
 
-  table.insert(t,"构建方法")
+  table.insert(t,"Constructors")
   local cs=class.getConstructors()
   for n=0,#cs-1 do
     table.insert(t,tostring(cs[n]))
@@ -72,26 +72,26 @@ clist.onItemClick=function(l,v)
       table.insert(gs,string.format("(%s)%s",g1,g2))
     end
   end
-  table.insert(t,"公有事件")
+  table.insert(t,"Public events")
   for k,v in ipairs(es) do
     table.insert(t,v)
   end
-  table.insert(t,"公有getter")
+  table.insert(t,"Public getters")
   for k,v in ipairs(gs) do
     table.insert(t,v)
   end
-  table.insert(t,"公有setter")
+  table.insert(t,"Public setters")
   for k,v in ipairs(ss) do
     table.insert(t,v)
   end
 
   curr_fs=class.getFields()
-  table.insert(t,"公有字段")
+  table.insert(t,"Public fields")
   for n=0,#curr_fs-1 do
     table.insert(t,tostring(curr_fs[n]))
   end
 
-  table.insert(t,"公有方法")
+  table.insert(t,"Public methods")
   for k,v in ipairs(ms) do
     table.insert(t,v)
   end
@@ -129,14 +129,14 @@ medit.addTextChangedListener{
     local class=curr_class
     local t={}
     local fs=curr_fs
-    table.insert(t,"公有字段")
+    table.insert(t,"Public fields")
     for n=0,#fs-1 do
       if fs[n].Name:find(s,1,true) then
         table.insert(t,tostring(fs[n]))
       end
     end
     local ms=curr_ms
-    table.insert(t,"公有方法")
+    table.insert(t,"Public methods")
     for n=0,#ms-1 do
       if ms[n].Name:find(s,1,true) then
         table.insert(t,tostring(ms[n]))
