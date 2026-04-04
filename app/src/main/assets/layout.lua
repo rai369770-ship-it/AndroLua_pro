@@ -5,7 +5,7 @@ layout={
     layout_height="fill",
     orientation="vertical",
     {
-      EditText,
+      AppCompatEditText,
       id="editor",
       text="",
       textSize="16sp",
@@ -114,9 +114,9 @@ layout={
     LinearLayout,
     orientation="vertical",
     {
-      EditText,
+      AppCompatEditText,
       layout_width="fill",
-      layout_height="180dp",
+      layout_height="220dp",
       id="open_edit",
       textSize="18sp",
       gravity="top|start",

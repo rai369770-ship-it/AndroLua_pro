@@ -1,158 +1,206 @@
 local require = require
 local table = require "table"
+local string = require "string"
+local pcall = pcall
+local ipairs = ipairs
+local pairs = pairs
+local tostring = tostring
+local type = type
+local error = error
+
 local loaded = {}
 local imported = {}
 luajava.loaded = loaded
 luajava.imported = imported
+
 local _G = _G
 local insert = table.insert
-local new = luajava.new
 local bindClass = luajava.bindClass
-local dexes = {}
+
 local _M = {}
 local luacontext = activity or service
-dexes = luajava.astable(luacontext.getClassLoaders())
-local libs = luacontext.getLibrarys()
+local dexes = luajava.astable((luacontext and luacontext.getClassLoaders and luacontext.getClassLoaders()) or {})
+local libs = (luacontext and luacontext.getLibrarys and luacontext.getLibrarys()) or {}
 
-local function libsloader(path)
-    local root = path:match("^[%w_]+")
-    local p = libs[path] or (root and libs[root])
-    if p then
-        local loader = package.loadlib(p, "luaopen_" .. (path:gsub("%.", "_")))
-        if not loader and root and root ~= path then
-            loader = package.loadlib(p, "luaopen_" .. root)
-        end
-        if loader then
-            return loader, p
-        end
-    end
-    return "\n\tno file ./libs/lib" .. path .. ".so"
-end
-
-table.insert(package.searchers, libsloader)
-
-local function massage_classname(classname)
-    if classname:find('_') then
-        classname = classname:gsub('_', '$')
-    end
-    return classname
-end
-
-local function bind_class(packagename)
-    local res, class = pcall(bindClass, packagename)
-    if res then
-        loaded[packagename] = class
-        return class
-    end
-end
-
-local function import_class(packagename)
-    packagename = massage_classname(packagename)
-    local class = loaded[packagename] or bind_class(packagename)
-    return class
-end
-
-local function bind_dex_class(packagename)
-    packagename = massage_classname(packagename)
-    for _, dex in ipairs(dexes) do
-        local res, class = pcall(dex.loadClass, packagename)
-        if res then
-            loaded[packagename] = class
-            return class
-        end
-    end
-end
-
-local function import_dex_class(packagename)
-    packagename = massage_classname(packagename)
-    local class = loaded[packagename] or bind_dex_class(packagename)
-    return class
-end
-
-local pkgMT = {
-    __index = function(T, classname)
-        local ret, class = pcall(luajava.bindClass, rawget(T, "__name") .. classname)
-        if ret then
-            rawset(T, classname, class)
-            return class
-        else
-            error(classname .. " is not in " .. rawget(T, "__name"), 2)
-        end
-    end
-}
-
-local function import_pacckage(packagename)
-    local pkg = { __name = packagename }
-    setmetatable(pkg, pkgMT)
-    return pkg
-end
-
-
---setmetatable(_G, globalMT)
-
-local function import_require(name)
-    local s, r = pcall(require, name)
-    if not s and not r:find("no file") then
-        error(r, 0)
-    end
-    return s and r
-end
-
-local function append(t, v)
-    for _, _v in ipairs(t) do
-        if _v == v then
+local function append_unique(t, v)
+    for _, item in ipairs(t) do
+        if item == v then
             return
         end
     end
     insert(t, v)
 end
 
-local function local_import(_env, packages, package)
-    local j = package:find(':')
-    if j then
-        local dexname = package:sub(1, j - 1)
-        local classname = package:sub(j + 1, -1)
-        local class = luacontext.loadDex(dexname).loadClass(classname)
-        local classname = package:match('([^%.$]+)$')
-        _env[classname] = class
-        append(imported, package)
+local function normalize_classname(classname)
+    if classname and classname:find("_") then
+        return classname:gsub("_", "$")
+    end
+    return classname
+end
+
+local function normalize_luaopen(name)
+    return (name or ""):gsub("%.", "_"):gsub("%-", "_")
+end
+
+local function load_native_from(path, name)
+    local module_name = normalize_luaopen(name)
+    local root_name = module_name:match("^[^_]+") or module_name
+    local loader = package.loadlib(path, "luaopen_" .. module_name)
+    if not loader and root_name ~= module_name then
+        loader = package.loadlib(path, "luaopen_" .. root_name)
+    end
+    if loader then
+        return loader, path
+    end
+end
+
+local function libsloader(name)
+    local root = name:match("^[%w_]+")
+    local native_path = libs[name] or (root and libs[root])
+    if native_path then
+        local loader, resolved_path = load_native_from(native_path, name)
+        if loader then
+            return loader, resolved_path
+        end
+    end
+
+    local so_name = "lib" .. (root or name) .. ".so"
+    for chunk in tostring(package.cpath or ""):gmatch("[^;]+") do
+        local path = chunk:gsub("%?", root or name)
+        local loader = load_native_from(path, name)
+        if loader then
+            return loader
+        end
+        local fallback = path:match("^(.*)/[^/]+$")
+        if fallback then
+            loader = load_native_from(fallback .. "/" .. so_name, name)
+            if loader then
+                return loader
+            end
+        end
+    end
+
+    return "\n\tno native library for " .. name .. " (tried local libs and package.cpath)"
+end
+
+append_unique(package.searchers, libsloader)
+
+local function bind_class(packagename)
+    local ok, class = pcall(bindClass, packagename)
+    if ok then
+        loaded[packagename] = class
         return class
     end
-    local i = package:find('%*$')
-    if i then -- a wildcard; put into the package list, including the final '.'
-        append(packages, package:sub(1, -2))
-        append(imported, package)
-        return import_pacckage(package:sub(1, -2))
-    else
-        local classname = package:match('([^%.$]+)$')
-        local class = import_require(package) or import_class(package) or import_dex_class(package)
-        if class then
-            if class ~= true then
-                --findtable(package)=class
-                if type(class) ~= "table" then
-                    append(imported, package)
-                end
-                _env[classname] = class
-            end
+end
+
+local function bind_dex_class(packagename)
+    for _, dex in ipairs(dexes) do
+        local ok, class = pcall(dex.loadClass, packagename)
+        if ok then
+            loaded[packagename] = class
             return class
-        else
-            error("cannot find " .. package, 2)
         end
     end
 end
 
+local function import_class(packagename)
+    packagename = normalize_classname(packagename)
+    return loaded[packagename] or bind_class(packagename) or bind_dex_class(packagename)
+end
+
+local function import_require(name)
+    local ok, mod = pcall(require, name)
+    if ok then
+        return mod
+    end
+    if not tostring(mod):find("no file", 1, true) and not tostring(mod):find("no native library", 1, true) then
+        error(mod, 0)
+    end
+end
+
+local pkgMT = {
+    __index = function(T, classname)
+        local full = rawget(T, "__name") .. classname
+        local class = import_class(full)
+        if class then
+            rawset(T, classname, class)
+            return class
+        end
+
+        local nested = {
+            __name = full .. ".",
+            __resolver = rawget(T, "__resolver"),
+        }
+        setmetatable(nested, pkgMT)
+        rawset(T, classname, nested)
+        return nested
+    end
+}
+
+local function import_package(packagename)
+    local pkg = {
+        __name = packagename,
+        __resolver = import_class,
+    }
+    setmetatable(pkg, pkgMT)
+    return pkg
+end
+
+local function local_import(_env, packages, package_name)
+    local dex_index = package_name:find(':')
+    if dex_index then
+        local dexname = package_name:sub(1, dex_index - 1)
+        local classname = package_name:sub(dex_index + 1)
+        local class = luacontext.loadDex(dexname).loadClass(classname)
+        local alias = classname:match('([^%.$]+)$')
+        _env[alias] = class
+        append_unique(imported, package_name)
+        return class
+    end
+
+    if package_name:find('%*$') then
+        local pkg = package_name:sub(1, -2)
+        append_unique(packages, pkg)
+        append_unique(imported, package_name)
+        return import_package(pkg)
+    end
+
+    local alias = package_name:match('([^%.$]+)$')
+    local class_or_module = import_require(package_name) or import_class(package_name)
+
+    if class_or_module ~= nil then
+        if class_or_module ~= true then
+            if type(class_or_module) ~= "table" then
+                append_unique(imported, package_name)
+            end
+            _env[alias] = class_or_module
+        end
+        return class_or_module
+    end
+
+    error("cannot find " .. package_name, 2)
+end
 
 local function env_import(env)
     local _env = env or {}
-    local packages = {}
-    local loaders = {}
-    append(packages, '')
-    append(packages, 'java.lang.')
-    append(packages, 'java.util.')
-    append(packages, 'com.androlua.')
+    local packages = {
+        '',
+        'java.lang.',
+        'java.util.',
+        'java.io.',
+        'android.app.',
+        'android.content.',
+        'android.view.',
+        'android.widget.',
+        'androidx.',
+        'com.androlua.',
+        'okhttp3.',
+        'okio.',
+    }
 
-    local function import_1(classname)
-        for i, p in ipairs(packages) do
+    local function import_in_packages(classname)
+        classname = normalize_classname(classname)
+        for _, p in ipairs(packages) do
             local class = import_class(p .. classname)
             if class then
                 return class
@@ -160,64 +208,51 @@ local function env_import(env)
         end
     end
 
-    local function import_2(classname)
-        for _, p in ipairs(packages) do
-            local class = import_dex_class(p .. classname)
-            if class then
-                return class
-            end
-        end
-    end
-
-    append(loaders, import_1)
-    append(loaders, import_2)
-
     local globalMT = {
         __index = function(T, classname)
-            for i, p in ipairs(loaders) do
-                local class = loaded[classname] or p(classname)
-                if class then
-                    T[classname] = class
-                    return class
-                end
+            local class = loaded[classname] or import_in_packages(classname)
+            if class then
+                rawset(T, classname, class)
+                return class
             end
             return nil
         end
     }
 
-    if type(_env)=="string" then
-        return globalMT.__index({},_env)
+    if type(_env) == "string" then
+        return globalMT.__index({}, _env)
     end
 
     setmetatable(_env, globalMT)
     for k, v in pairs(_M) do
         _env[k] = v
     end
-    local import = function(package, env)
-        env = env or _env
-        if type(package) == "string" then
-            return local_import(env, packages, package)
-        elseif type(package) == "table" then
+
+    local function import_api(package_name, target_env)
+        target_env = target_env or _env
+        if type(package_name) == "string" then
+            return local_import(target_env, packages, package_name)
+        elseif type(package_name) == "table" then
             local ret = {}
-            for k, v in ipairs(package) do
-                ret[k] = local_import(env, packages, v)
+            for k, v in ipairs(package_name) do
+                ret[k] = local_import(target_env, packages, v)
             end
             return ret
         end
     end
-    _env.import = import
 
-    import("loadlayout", _env)
-    import("loadbitmap", _env)
-    import("loadmenu", _env)
+    _env.import = import_api
+
+    import_api("loadlayout", _env)
+    import_api("loadbitmap", _env)
+    import_api("loadmenu", _env)
+
     return _env
 end
 
-
 function _M.compile(name)
-    append(dexes, luacontext.loadDex(name))
+    append_unique(dexes, luacontext.loadDex(name))
 end
-
 
 function _M.enum(e)
     return function()
@@ -242,45 +277,39 @@ setmetatable(NIL, { __tostring = function() return "nil" end })
 function _M.dump(o)
     local t = {}
     local _t = {}
-    local _n = {}
     local space, deep = string.rep(' ', 2), 0
-    local function _ToString(o, _k)
-        if type(o) == ('number') then
-            table.insert(t, o)
-        elseif type(o) == ('string') then
-            table.insert(t, string.format('%q', o))
-        elseif type(o) == ('table') then
-            local mt = getmetatable(o)
+
+    local function _ToString(value, key_path)
+        if type(value) == 'number' then
+            table.insert(t, value)
+        elseif type(value) == 'string' then
+            table.insert(t, string.format('%q', value))
+        elseif type(value) == 'table' then
+            local mt = getmetatable(value)
             if mt and mt.__tostring then
-                table.insert(t, tostring(o))
+                table.insert(t, tostring(value))
             else
                 deep = deep + 2
                 table.insert(t, '{')
-
-                for k, v in pairs(o) do
+                for k, v in pairs(value) do
                     if v == _G then
                         table.insert(t, string.format('\r\n%s%s\t=%s ;', string.rep(space, deep - 1), k, "_G"))
                     elseif v ~= package.loaded then
-                        if tonumber(k) then
-                            k = string.format('[%s]', k)
-                        else
-                            k = string.format('[\"%s\"]', k)
-                        end
-                        table.insert(t, string.format('\r\n%s%s\t= ', string.rep(space, deep - 1), k))
+                        local key = tonumber(k) and string.format('[%s]', k) or string.format('[\"%s\"]', k)
+                        table.insert(t, string.format('\r\n%s%s\t= ', string.rep(space, deep - 1), key))
                         if v == NIL then
-                            table.insert(t, string.format('%s ;',"nil"))
-                        elseif type(v) == ('table') then
+                            table.insert(t, 'nil ;')
+                        elseif type(v) == 'table' then
                             if _t[tostring(v)] == nil then
-                                _t[tostring(v)] = v
-                                local _k = _k .. k
-                                _t[tostring(v)] = _k
-                                _ToString(v, _k)
+                                local next_key_path = key_path .. key
+                                _t[tostring(v)] = next_key_path
+                                _ToString(v, next_key_path)
                             else
                                 table.insert(t, tostring(_t[tostring(v)]))
                                 table.insert(t, ';')
                             end
                         else
-                            _ToString(v, _k)
+                            _ToString(v, key_path)
                         end
                     end
                 end
@@ -288,97 +317,68 @@ function _M.dump(o)
                 deep = deep - 2
             end
         else
-            table.insert(t, tostring(o))
+            table.insert(t, tostring(value))
         end
-        table.insert(t, " ;")
+        table.insert(t, ' ;')
         return t
     end
 
-    t = _ToString(o, '')
-    return table.concat(t)
+    return table.concat(_ToString(o, ''))
 end
-
 
 function _M.printstack()
     local stacks = {}
     for m = 2, 16 do
-        local dbs = {}
         local info = debug.getinfo(m)
         if info == nil then
             break
         end
+
+        local dbs = { info = info, upvalues = {}, localvalues = { vararg = {} } }
         table.insert(stacks, dbs)
-        dbs.info = info
+
         local func = info.func
-        local nups = info.nups
-        local ups = {}
-        dbs.upvalues = ups
-        for n = 1, nups do
-            local n, v = debug.getupvalue(func, n)
-            if v == nil then
-                v = NIL
-            end
-            if string.byte(n) == 40 then
-                if ups[n] == nil then
-                    ups[n] = {}
-                end
-                table.insert(ups[n], v)
+        for n = 1, info.nups do
+            local upname, upval = debug.getupvalue(func, n)
+            if upval == nil then upval = NIL end
+            if string.byte(upname) == 40 then
+                dbs.upvalues[upname] = dbs.upvalues[upname] or {}
+                table.insert(dbs.upvalues[upname], upval)
             else
-                ups[n] = v
+                dbs.upvalues[upname] = upval
             end
         end
 
-        local lps = {}
-        dbs.localvalues = lps
-        lps.vararg = {}
-        --lps.temporary={}
         for n = -1, -255, -1 do
-            local k, v = debug.getlocal(m, n)
-            if k == nil then
-                break
-            end
-            if v == nil then
-                v = NIL
-            end
-            table.insert(lps.vararg, v)
+            local _, val = debug.getlocal(m, n)
+            if _ == nil then break end
+            table.insert(dbs.localvalues.vararg, val == nil and NIL or val)
         end
+
         for n = 1, 255 do
-            local n, v = debug.getlocal(m, n)
-            if n == nil then
-                break
-            end
-            if v == nil then
-                v = NIL
-            end
-            if string.byte(n) == 40 then
-                if lps[n] == nil then
-                    lps[n] = {}
-                end
-                table.insert(lps[n], v)
+            local lname, lval = debug.getlocal(m, n)
+            if lname == nil then break end
+            if lval == nil then lval = NIL end
+            if string.byte(lname) == 40 then
+                dbs.localvalues[lname] = dbs.localvalues[lname] or {}
+                table.insert(dbs.localvalues[lname], lval)
             else
-                lps[n] = v
+                dbs.localvalues[lname] = lval
             end
-            --table.insert(lps,string.format("%s=%s",n,v))
         end
     end
     print(dump(stacks))
-    -- print("info="..dump(dbs))
-    -- print("_ENV="..dump(ups._ENV or lps._ENV))
 end
 
-
 if activity then
-
     function _M.print(...)
         local buf = {}
         for n = 1, select("#", ...) do
             table.insert(buf, tostring(select(n, ...)))
         end
-        local msg = table.concat(buf, "\t\t")
-        activity.sendMsg(msg)
+        activity.sendMsg(table.concat(buf, "\t\t"))
     end
 end
-
 
 function _M.getids()
     return luajava.ids
@@ -388,41 +388,6 @@ local LuaAsyncTask = luajava.bindClass("com.androlua.LuaAsyncTask")
 local LuaThread = luajava.bindClass("com.androlua.LuaThread")
 local LuaTimer = luajava.bindClass("com.androlua.LuaTimer")
 local Object = luajava.bindClass("java.lang.Object")
-
-
-local function setmetamethod(t, k, v)
-    getmetatable(t)[k] = v
-end
-
-local function getmetamethod(t, k, v)
-    return getmetatable(t)[k]
-end
-
-
-local getjavamethod = getmetamethod(LuaThread, "__index")
-local function __call(t, k)
-    return function(...)
-        if ... then
-            t.call(k, Object { ... })
-        else
-            t.call(k)
-        end
-    end
-end
-
-local function __index(t, k)
-    local s, r = pcall(getjavamethod, t, k)
-    if s then
-        return r
-    end
-    local r = __call(t, k)
-    setmetamethod(t, k, r)
-    return r
-end
-
-local function __newindex(t, k, v)
-    t.set(k, v)
-end
 
 local function checkPath(path)
     if path:find("^[^/][%w%./_%-]+$") then
@@ -446,8 +411,6 @@ function _M.thread(src, ...)
         luaThread = LuaThread(activity or service, src, true)
     end
     luaThread.start()
-    --setmetamethod(luaThread,"__index",__index)\
-    --setmetamethod(luaThread,"__newindex",__newindex)
     return luaThread
 end
 
@@ -490,19 +453,23 @@ env_import(_G)
 
 local luajava_mt = {}
 luajava_mt.__index = function(t, k)
-    local b, ret = xpcall(function()
-        return luajava.bindClass((rawget(t, "__name") or "") .. k)
-    end,
-        function()
-            local p = {}
-            p.__name = (rawget(t, "__name") or "") .. k .. "."
-            setmetatable(p, luajava_mt)
-            return p
-        end)
+    local ok, ret = xpcall(function()
+        return import_class((rawget(t, "__name") or "") .. k)
+    end, function()
+        local p = {}
+        p.__name = (rawget(t, "__name") or "") .. k .. "."
+        setmetatable(p, luajava_mt)
+        return p
+    end)
+
+    if ok and ret then
+        rawset(t, k, ret)
+        return ret
+    end
+
     rawset(t, k, ret)
     return ret
 end
 setmetatable(luajava, luajava_mt)
 
 return env_import
-
