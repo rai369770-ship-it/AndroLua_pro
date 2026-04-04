@@ -110,6 +110,35 @@ layout={
       },
     }
   },
+  open_files={
+    LinearLayout,
+    orientation="vertical",
+    {
+      TextView,
+      id="open_files_path",
+      layout_width="fill",
+      padding="8dp",
+      textSize="14sp",
+      text="/",
+    },
+    {
+      AppCompatEditText,
+      layout_width="fill",
+      layout_height="wrap_content",
+      id="open_files_edit",
+      hint="Filter files",
+      singleLine=true,
+      imeOptions="actionDone",
+      inputType="textNoSuggestions",
+    },
+    {
+      ListView,
+      layout_width="fill",
+      layout_height="0dp",
+      layout_weight=1,
+      id="open_files_list",
+    },
+  },
   open2={
     LinearLayout,
     orientation="vertical",

@@ -7,8 +7,12 @@ local pairs = pairs
 local tostring = tostring
 local type = type
 local error = error
+local rawget = rawget
+local rawset = rawset
+local select = select
 
 local loaded = {}
+local loaded_false = {}
 local imported = {}
 luajava.loaded = loaded
 luajava.imported = imported
@@ -16,13 +20,18 @@ luajava.imported = imported
 local _G = _G
 local insert = table.insert
 local bindClass = luajava.bindClass
+local astable = luajava.astable
 
 local _M = {}
 local luacontext = activity or service
-local dexes = luajava.astable((luacontext and luacontext.getClassLoaders and luacontext.getClassLoaders()) or {})
+local dexes = astable((luacontext and luacontext.getClassLoaders and luacontext.getClassLoaders()) or {})
 local libs = (luacontext and luacontext.getLibrarys and luacontext.getLibrarys()) or {}
+local class_loaders = {}
 
 local function append_unique(t, v)
+    if v == nil then
+        return
+    end
     for _, item in ipairs(t) do
         if item == v then
             return
@@ -80,32 +89,102 @@ local function libsloader(name)
         end
     end
 
-    return "\n\tno native library for " .. name .. " (tried local libs and package.cpath)"
+    return "
+	no native library for " .. name .. " (tried local libs and package.cpath)"
 end
 
 append_unique(package.searchers, libsloader)
 
+local JavaClass = bindClass("java.lang.Class")
+local JavaThread = bindClass("java.lang.Thread")
+
+local function append_loader(loader)
+    if loader then
+        append_unique(class_loaders, loader)
+    end
+end
+
+local function rebuild_loaders()
+    class_loaders = {}
+    append_loader((luacontext and luacontext.getClassLoader and luacontext.getClassLoader()) or nil)
+    append_loader((activity and activity.getClassLoader and activity.getClassLoader()) or nil)
+    append_loader((service and service.getClassLoader and service.getClassLoader()) or nil)
+    local ok, thread = pcall(JavaThread.currentThread)
+    if ok and thread then
+        append_loader(thread.getContextClassLoader())
+    end
+
+    for _, loader in ipairs(dexes) do
+        append_loader(loader)
+        local ok2, dex_loader = pcall(function() return loader.getClassLoader and loader.getClassLoader() end)
+        if ok2 and dex_loader then
+            append_loader(dex_loader)
+        end
+    end
+end
+
+rebuild_loaders()
+
 local function bind_class(packagename)
     local ok, class = pcall(bindClass, packagename)
-    if ok then
+    if ok and class then
         loaded[packagename] = class
         return class
+    end
+end
+
+local function class_for_name(packagename)
+    local ok, class = pcall(JavaClass.forName, packagename)
+    if ok and class then
+        loaded[packagename] = class
+        return class
+    end
+
+    for _, loader in ipairs(class_loaders) do
+        local ok2, cls = pcall(JavaClass.forName, packagename, false, loader)
+        if ok2 and cls then
+            loaded[packagename] = cls
+            return cls
+        end
     end
 end
 
 local function bind_dex_class(packagename)
     for _, dex in ipairs(dexes) do
         local ok, class = pcall(dex.loadClass, packagename)
-        if ok then
+        if ok and class then
             loaded[packagename] = class
             return class
         end
     end
 end
 
+local function try_import_name(packagename)
+    return loaded[packagename] or bind_class(packagename) or bind_dex_class(packagename) or class_for_name(packagename)
+end
+
 local function import_class(packagename)
     packagename = normalize_classname(packagename)
-    return loaded[packagename] or bind_class(packagename) or bind_dex_class(packagename)
+    if loaded_false[packagename] then
+        return nil
+    end
+
+    local class = try_import_name(packagename)
+    if class then
+        return class
+    end
+
+    local inner = packagename
+    while inner:find("%.") do
+        inner = inner:gsub("%.([^%.]+)$", "$%1", 1)
+        class = try_import_name(inner)
+        if class then
+            loaded[packagename] = class
+            return class
+        end
+    end
+
+    loaded_false[packagename] = true
 end
 
 local function import_require(name)
@@ -113,7 +192,8 @@ local function import_require(name)
     if ok then
         return mod
     end
-    if not tostring(mod):find("no file", 1, true) and not tostring(mod):find("no native library", 1, true) then
+    local msg = tostring(mod)
+    if not msg:find("no file", 1, true) and not msg:find("no native library", 1, true) then
         error(mod, 0)
     end
 end
@@ -129,7 +209,6 @@ local pkgMT = {
 
         local nested = {
             __name = full .. ".",
-            __resolver = rawget(T, "__resolver"),
         }
         setmetatable(nested, pkgMT)
         rawset(T, classname, nested)
@@ -138,12 +217,25 @@ local pkgMT = {
 }
 
 local function import_package(packagename)
+    local normalized = packagename
+    if not normalized:find("%.$") then
+        normalized = normalized .. "."
+    end
     local pkg = {
-        __name = packagename,
-        __resolver = import_class,
+        __name = normalized,
     }
     setmetatable(pkg, pkgMT)
     return pkg
+end
+
+local function maybe_register_package(packages, package_name)
+    local pkg = package_name:gsub("%*$", "")
+    if not pkg:find("%.$") then
+        pkg = pkg .. "."
+    end
+    append_unique(packages, pkg)
+    append_unique(imported, package_name)
+    return import_package(pkg)
 end
 
 local function local_import(_env, packages, package_name)
@@ -155,14 +247,12 @@ local function local_import(_env, packages, package_name)
         local alias = classname:match('([^%.$]+)$')
         _env[alias] = class
         append_unique(imported, package_name)
+        rebuild_loaders()
         return class
     end
 
     if package_name:find('%*$') then
-        local pkg = package_name:sub(1, -2)
-        append_unique(packages, pkg)
-        append_unique(imported, package_name)
-        return import_package(pkg)
+        return maybe_register_package(packages, package_name)
     end
 
     local alias = package_name:match('([^%.$]+)$')
@@ -176,6 +266,10 @@ local function local_import(_env, packages, package_name)
             _env[alias] = class_or_module
         end
         return class_or_module
+    end
+
+    if package_name:find("^[%w_%.]+$") and not package_name:find("%u") then
+        return maybe_register_package(packages, package_name)
     end
 
     error("cannot find " .. package_name, 2)
@@ -252,6 +346,7 @@ end
 
 function _M.compile(name)
     append_unique(dexes, luacontext.loadDex(name))
+    rebuild_loaders()
 end
 
 function _M.enum(e)
@@ -293,10 +388,12 @@ function _M.dump(o)
                 table.insert(t, '{')
                 for k, v in pairs(value) do
                     if v == _G then
-                        table.insert(t, string.format('\r\n%s%s\t=%s ;', string.rep(space, deep - 1), k, "_G"))
+                        table.insert(t, string.format('
+%s%s	=%s ;', string.rep(space, deep - 1), k, "_G"))
                     elseif v ~= package.loaded then
-                        local key = tonumber(k) and string.format('[%s]', k) or string.format('[\"%s\"]', k)
-                        table.insert(t, string.format('\r\n%s%s\t= ', string.rep(space, deep - 1), key))
+                        local key = tonumber(k) and string.format('[%s]', k) or string.format('["%s"]', k)
+                        table.insert(t, string.format('
+%s%s	= ', string.rep(space, deep - 1), key))
                         if v == NIL then
                             table.insert(t, 'nil ;')
                         elseif type(v) == 'table' then
@@ -313,7 +410,8 @@ function _M.dump(o)
                         end
                     end
                 end
-                table.insert(t, string.format('\r\n%s}', string.rep(space, deep - 1)))
+                table.insert(t, string.format('
+%s}', string.rep(space, deep - 1)))
                 deep = deep - 2
             end
         else
@@ -376,7 +474,7 @@ if activity then
         for n = 1, select("#", ...) do
             table.insert(buf, tostring(select(n, ...)))
         end
-        activity.sendMsg(table.concat(buf, "\t\t"))
+        activity.sendMsg(table.concat(buf, "		"))
     end
 end
 
