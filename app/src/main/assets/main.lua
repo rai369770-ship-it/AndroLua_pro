@@ -1084,23 +1084,91 @@ func.qq = function()
 end
 
 func.about = function()
-    local message = [[
-Welcome to AndroLua Professional.
-
-This edition is focused on modern Android compatibility, stable Lua import behavior, stronger project tooling, and an improved editing workflow for daily development.
-
-Highlights:
-- Better compatibility with AndroidX and modern libraries.
-- Improved APK build workflow from project settings.
-- Faster coding flow with quick action controls.
-- Cleaner and more consistent editor experience.
-
-Created by: Sujan Rai and SSteam.
-Contact: sujanrai8448@gmail.com
-]]
+    local aboutLayout = {
+        ScrollView,
+        layout_width = "fill",
+        layout_height = "wrap",
+        {
+            LinearLayout,
+            orientation = "vertical",
+            padding = "16dp",
+            layout_width = "fill",
+            layout_height = "wrap",
+            {
+                TextView,
+                text = "Welcome to AndroLua Professional",
+                textSize = "20sp",
+                textStyle = "bold",
+                layout_width = "fill",
+                layout_height = "wrap",
+            },
+            {
+                TextView,
+                text = "This edition is focused on modern Android compatibility, stable Lua import behavior, stronger project tooling, and an improved editing workflow for daily development.",
+                textSize = "14sp",
+                layout_marginTop = "10dp",
+                layout_width = "fill",
+                layout_height = "wrap",
+            },
+            {
+                TextView,
+                text = "Highlights",
+                textStyle = "bold",
+                textSize = "16sp",
+                layout_marginTop = "14dp",
+                layout_width = "fill",
+                layout_height = "wrap",
+            },
+            {
+                TextView,
+                text = "• Better compatibility with AndroidX and modern libraries.",
+                textSize = "14sp",
+                layout_marginTop = "6dp",
+                layout_width = "fill",
+                layout_height = "wrap",
+            },
+            {
+                TextView,
+                text = "• Improved APK build workflow from project settings.",
+                textSize = "14sp",
+                layout_width = "fill",
+                layout_height = "wrap",
+            },
+            {
+                TextView,
+                text = "• Faster coding flow with quick action controls.",
+                textSize = "14sp",
+                layout_width = "fill",
+                layout_height = "wrap",
+            },
+            {
+                TextView,
+                text = "• Cleaner and more consistent editor experience.",
+                textSize = "14sp",
+                layout_width = "fill",
+                layout_height = "wrap",
+            },
+            {
+                TextView,
+                text = "Created by: Sujan Rai and SSteam.",
+                textStyle = "bold",
+                textSize = "14sp",
+                layout_marginTop = "14dp",
+                layout_width = "fill",
+                layout_height = "wrap",
+            },
+            {
+                TextView,
+                text = "Contact: sujanrai8448@gmail.com",
+                textSize = "14sp",
+                layout_width = "fill",
+                layout_height = "wrap",
+            },
+        }
+    }
     local aboutDlg = LuaDialog(activity)
     aboutDlg.setTitle("Welcome to AndroLua Professional")
-    aboutDlg.setMessage(message)
+    aboutDlg.setView(loadlayout(aboutLayout))
     aboutDlg.setPositiveButton("Close", nil)
     aboutDlg.setNeutralButton("WhatsApp", { onClick = function() activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/9779708340992"))) end })
     aboutDlg.setNegativeButton("Email", { onClick = function() activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("mailto:sujanrai8448@gmail.com"))) end })
