@@ -1,6 +1,5 @@
 require "import"
 
-import "android.app.ProgressDialog"
 import "android.content.Intent"
 import "android.net.Uri"
 import "android.widget.Toast"
@@ -13,9 +12,6 @@ import "java.util.ArrayList"
 import "java.util.zip.ZipEntry"
 import "java.util.zip.ZipInputStream"
 import "java.util.zip.ZipOutputStream"
-
-local bin_dlg
-local error_dlg
 
 local function run_on_ui(action)
     if not action then
@@ -36,52 +32,16 @@ local function safe_toast(msg, duration)
     end)
 end
 
-local function ensure_error_dlg()
-    if error_dlg then
-        return error_dlg
-    end
-    error_dlg = AlertDialogBuilder(activity)
-    error_dlg.Title = "Build error"
-    error_dlg.setPositiveButton("OK", nil)
-    return error_dlg
-end
-
-local function ensure_bin_dlg()
-    if bin_dlg then
-        return bin_dlg
-    end
-    bin_dlg = ProgressDialog(activity)
-    bin_dlg.setTitle("Building APK")
-    bin_dlg.setMax(100)
-    return bin_dlg
-end
-
 local function update_status(msg)
-    run_on_ui(function()
-        if bin_dlg then
-            bin_dlg.setMessage(tostring(msg or ""))
-        end
-    end)
+    -- Build now reports status only through success/failure toasts.
 end
 
 local function on_task_finished(result)
     LuaUtil.rmDir(File(activity.getLuaExtDir("bin/.temp")))
-    run_on_ui(function()
-        if bin_dlg then
-            bin_dlg.hide()
-            bin_dlg.Message = ""
-        end
-        if type(result) ~= "string" then
-            result = tostring(result)
-        end
-        if not result:find("success", 1, true) then
-            local dlg = ensure_error_dlg()
-            dlg.Message = result
-            dlg.show()
-        else
-            safe_toast(result)
-        end
-    end)
+    if type(result) ~= "string" then
+        result = tostring(result)
+    end
+    safe_toast(result)
 end
 
 local function copy_stream(input, output)
@@ -302,6 +262,28 @@ local function binapk(project_dir, apkpath)
         copy_stream(FileInputStream(welcome), zip_out)
     end
 
+    local function include_project_libs(root, abi)
+        local abi_dir = File(root .. "/" .. abi)
+        if not abi_dir.exists() or not abi_dir.isDirectory() then
+            return
+        end
+        local files = luajava.astable(abi_dir.listFiles() or {})
+        for _, file in ipairs(files) do
+            if file.isFile() and tostring(file.Name):find("%.so$") then
+                local entry_name = "lib/" .. abi .. "/" .. tostring(file.Name)
+                zip_out.putNextEntry(ZipEntry(entry_name))
+                replace[entry_name] = true
+                copy_stream(FileInputStream(file), zip_out)
+                table.insert(md5s, LuaUtil.getFileMD5(file))
+            end
+        end
+    end
+
+    include_project_libs(project_dir .. "lib", "arm64-v8a")
+    include_project_libs(project_dir .. "lib", "armeabi-v7a")
+    include_project_libs(project_dir .. "libs", "arm64-v8a")
+    include_project_libs(project_dir .. "libs", "armeabi-v7a")
+
     update_status("Packaging APK...")
 
     local function touint32(i)
@@ -318,7 +300,6 @@ local function binapk(project_dir, apkpath)
         local name = entry.getName()
         local lib = name:match("([^/]+%.so)$")
         local skip = replace[name]
-            or (lib and replace[lib])
             or name:find("^assets/")
             or name:find("^lua/")
             or name:find("META%-INF")
@@ -399,39 +380,18 @@ local function binapk(project_dir, apkpath)
 end
 
 local function build(path)
-    run_on_ui(function()
-        local dlg_builder = (type(ensure_bin_dlg) == "function") and ensure_bin_dlg or function()
-            if not bin_dlg then
-                bin_dlg = ProgressDialog(activity)
-                bin_dlg.setTitle("Building APK")
-                bin_dlg.setMax(100)
-            end
-            return bin_dlg
-        end
-
-        dlg_builder().show()
-    end)
+    safe_toast("Building APK...")
 
     local p = {}
     local ok, err = pcall(loadfile(path .. "init.lua", "bt", p))
     if not ok then
         safe_toast("Project config file error: " .. tostring(err))
-        run_on_ui(function()
-            if bin_dlg then
-                bin_dlg.hide()
-            end
-        end)
         return
     end
 
     local builder = p.binapk or binapk
     if type(builder) ~= "function" then
         safe_toast("Build task loader error: binapk is invalid.")
-        run_on_ui(function()
-            if bin_dlg then
-                bin_dlg.hide()
-            end
-        end)
         return
     end
 

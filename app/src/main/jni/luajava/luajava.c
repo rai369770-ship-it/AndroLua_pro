@@ -97,6 +97,7 @@ static jmethodID java_create_method = NULL;
 static jmethodID java_new_method = NULL;
 static jmethodID object_call_method = NULL;
 static jmethodID java_newinstance_method = NULL;
+static jmethodID java_override_method = NULL;
 static jmethodID as_table_method = NULL;
 static jmethodID to_string_method = NULL;
 static jmethodID get_type_method = NULL;
@@ -124,6 +125,7 @@ static int createArray(lua_State *L);
 static int javaNew(lua_State *L);
 
 static int javaNewInstance(lua_State *L);
+static int javaExtend(lua_State *L);
 
 static int javaLoadLib(lua_State *L);
 
@@ -370,6 +372,10 @@ static void init(JNIEnv *javaEnv, lua_State *L) {
         java_newinstance_method = (*javaEnv)->GetStaticMethodID(
                 javaEnv, luajava_api_class, "javaNewInstance",
                 "(JLjava/lang/String;)I");
+    if (java_override_method == NULL)
+        java_override_method = (*javaEnv)->GetStaticMethodID(
+                javaEnv, luajava_api_class, "javaOverride",
+                "(JLjava/lang/Class;)I");
     if (as_table_method == NULL)
         as_table_method = (*javaEnv)->GetStaticMethodID(
                 javaEnv, luajava_api_class, "asTable", "(JLjava/lang/Object;)I");
@@ -404,6 +410,18 @@ static void init(JNIEnv *javaEnv, lua_State *L) {
 }
 
 #define NAME "__name"
+
+static inline void pushObjectCache(lua_State *L, int tableIndex, const void *key) {
+    lua_pushlightuserdata(L, (void *) key);
+    lua_rawget(L, tableIndex);
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 1);
+        lua_newtable(L);
+        lua_pushlightuserdata(L, (void *) key);
+        lua_pushvalue(L, -2);
+        lua_rawset(L, tableIndex);
+    }
+}
 
 static inline const char *getObjectName(lua_State *L, JNIEnv *env,
                                         jobject obj) {
@@ -487,12 +505,7 @@ int objectIndex(lua_State *L) {
         key = lua_tostring(L, 2);
         lua_getmetatable(L, 1);
         /* lua stack：1,object;2,key;3,metatable */
-        if (lua_rawgeti(L, 3, (int) obj) == LUA_TNIL) {
-            lua_pop(L, 1);
-            lua_newtable(L);
-            lua_pushvalue(L, -1);
-            lua_rawseti(L, 3, (int) obj);
-        }
+        pushObjectCache(L, 3, obj);
         lua_pushvalue(L, 2);
         int mtype = lua_rawget(L, -2);
         //int mtype = lua_type(L, -1);
@@ -655,12 +668,7 @@ int objectNewIndex(lua_State *L) {
         lua_getmetatable(L, 1);
 
         /* lua stack：1,object;2,key;3,value;4,metatable */
-        if (lua_rawgeti(L, 4, (int) obj) == LUA_TNIL) {
-            lua_pop(L, 1);
-            lua_newtable(L);
-            lua_pushvalue(L, -1);
-            lua_rawseti(L, 4, (int) obj);
-        }
+        pushObjectCache(L, 4, obj);
         const char *name = getObjectName(L, javaEnv, *obj);
         //luaL_getsubtable(L, 3, "_CACHE");
         if (lua_rawgeti(L, 4, 0) == LUA_TNIL) {
@@ -722,8 +730,9 @@ int gc(lua_State *L) {
 
     pObj = (jobject *) lua_touserdata(L, 1);
     lua_getmetatable(L, 1);
+    lua_pushlightuserdata(L, pObj);
     lua_pushnil(L);
-    lua_rawseti(L, -2, (int) pObj);
+    lua_rawset(L, -3);
     lua_pop(L, 1);
 
     /* Gets the JNI Environment */
@@ -968,6 +977,42 @@ int javaNewInstance(lua_State *L) {
 
 /***************************************************************************
 *
+*  Function: javaExtend
+*  ****/
+int javaExtend(lua_State *L) {
+    jint ret;
+    jlong stateIndex;
+    jobject *classInstance;
+    JNIEnv *javaEnv;
+
+    if (lua_gettop(L) != 2) {
+        lua_pushstring(L, "Error. Function extend expects 2 arguments.");
+        lua_error(L);
+    }
+    if (lua_type(L, 2) != LUA_TTABLE) {
+        lua_pushstring(L, "Error. Function extend expects a class and a table.");
+        lua_error(L);
+    }
+
+    stateIndex = checkIndex(L);
+    classInstance = checkJavaObject(L, 1);
+    javaEnv = checkEnv(L);
+
+    if ((*javaEnv)->IsInstanceOf(javaEnv, *classInstance, java_lang_class) ==
+        JNI_FALSE) {
+        lua_pushstring(L, "Error. extend first parameter must be a java Class.");
+        lua_error(L);
+    }
+
+    ret = (*javaEnv)->CallStaticIntMethod(javaEnv, luajava_api_class,
+                                          java_override_method,
+                                          stateIndex, *classInstance);
+    checkError(javaEnv, L);
+    return ret;
+}
+
+/***************************************************************************
+*
 *  Function: javaLoadLib
 *  ****/
 
@@ -998,7 +1043,7 @@ int javaLoadLib(lua_State *L) {
 
     method =
             (*javaEnv)->GetStaticMethodID(javaEnv, luajava_api_class, "javaLoadLib",
-                                          "(ILjava/lang/String;Ljava/lang/String;)I");
+                                          "(JLjava/lang/String;Ljava/lang/String;)I");
 
     javaClassName = (*javaEnv)->NewStringUTF(javaEnv, className);
     javaMethodName = (*javaEnv)->NewStringUTF(javaEnv, methodName);
@@ -1434,6 +1479,8 @@ static void set_info(lua_State *L) {
 static const luaL_Reg ljlib[] = {{"bindClass",   javaBindClass},
                                  {"new",         javaNew},
                                  {"newInstance", javaNewInstance},
+                                 {"extend",      javaExtend},
+                                 {"override",    javaExtend},
                                  {"loadLib",     javaLoadLib},
                                  {"createProxy", createProxy},
                                  {"newArray",    newArray},

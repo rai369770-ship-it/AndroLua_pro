@@ -55,10 +55,16 @@ local function get_native_search_dirs()
     local dirs = {}
     local project_dir = luajava.luadir
     local runtime_dir = (luacontext and luacontext.getLuaDir and luacontext.getLuaDir()) or nil
+    local native_dir = (activity and activity.ApplicationInfo and activity.ApplicationInfo.nativeLibraryDir) or nil
+    local app_native_dir = (luacontext and luacontext.getApplicationInfo and luacontext.getApplicationInfo().nativeLibraryDir) or nil
     append_unique(dirs, project_dir)
     append_unique(dirs, runtime_dir)
+    append_unique(dirs, native_dir)
+    append_unique(dirs, app_native_dir)
     append_unique(dirs, project_dir and (project_dir .. "/libs") or nil)
     append_unique(dirs, runtime_dir and (runtime_dir .. "/libs") or nil)
+    append_unique(dirs, project_dir and (project_dir .. "/lib/arm64-v8a") or nil)
+    append_unique(dirs, runtime_dir and (runtime_dir .. "/lib/arm64-v8a") or nil)
     append_unique(dirs, project_dir and (project_dir .. "/lib/armeabi-v7a") or nil)
     append_unique(dirs, project_dir and (project_dir .. "/lib/armeavi-v7a") or nil)
     append_unique(dirs, project_dir and (project_dir .. "/lib/armeabi") or nil)
