@@ -15,6 +15,6 @@ LOCAL_SRC_FILES := \
     
 
 LOCAL_LDLIBS := -lGLESv1_CM -ldl -llog
-LOCAL_STATIC_LIBRARIES := luajava
+LOCAL_SHARED_LIBRARIES := luajava
 
 include $(BUILD_SHARED_LIBRARY)

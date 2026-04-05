@@ -12,6 +12,6 @@ TARGET_ABI := android-14-armeabi
 LOCAL_MODULE     := luajava
 LOCAL_SRC_FILES  := luajava.c
 LOCAL_LDLIBS += -L$(SYSROOT)/usr/lib -llog -ldl
-LOCAL_STATIC_LIBRARIES := liblua
+LOCAL_STATIC_LIBRARIES := lua
 
 include $(BUILD_SHARED_LIBRARY)
