@@ -1,434 +1,398 @@
 require "import"
-
-import "android.content.Intent"
-import "android.net.Uri"
-import "android.widget.Toast"
-import "java.io.BufferedInputStream"
-import "java.io.BufferedOutputStream"
-import "java.io.File"
-import "java.io.FileInputStream"
-import "java.io.FileOutputStream"
-import "java.util.ArrayList"
-import "java.util.zip.ZipEntry"
-import "java.util.zip.ZipInputStream"
 import "java.util.zip.ZipOutputStream"
+import "android.net.Uri"
+import "java.io.File"
+import "android.widget.Toast"
+import "java.util.zip.CheckedInputStream"
+import "java.io.FileInputStream"
+import "android.content.Intent"
+import "java.security.Signer"
+import "java.util.ArrayList"
+import "java.io.FileOutputStream"
+import "java.io.BufferedOutputStream"
+import "java.util.zip.ZipInputStream"
+import "java.io.BufferedInputStream"
+import "java.util.zip.ZipEntry"
+import "android.app.ProgressDialog"
+import "java.util.zip.CheckedOutputStream"
+import "java.util.zip.Adler32"
 
-local function run_on_ui(action)
-    if not action then
+local bin_dlg, error_dlg
+local function update(s)
+    bin_dlg.setMessage(s)
+end
+
+local function callback(s)
+    LuaUtil.rmDir(File(activity.getLuaExtDir("bin/.temp")))
+    bin_dlg.hide()
+    bin_dlg.Message = ""
+    if not s:find("Success") then
+        error_dlg.Message = s
+        error_dlg.show()
+    end
+end
+
+local function create_bin_dlg()
+    if bin_dlg then
         return
     end
-    if activity and activity.runOnUiThread then
-        activity.runOnUiThread(action)
-    else
-        action()
+    bin_dlg = ProgressDialog(activity);
+    bin_dlg.setTitle("Packaging");
+    bin_dlg.setMax(100);
+end
+
+local function create_error_dlg2()
+    if error_dlg then
+        return
     end
+    error_dlg = AlertDialogBuilder(activity)
+    error_dlg.Title = "Error"
+    error_dlg.setPositiveButton("OK", nil)
 end
 
-local function safe_toast(msg, duration)
-    run_on_ui(function()
-        if activity then
-            Toast.makeText(activity, tostring(msg), duration or Toast.LENGTH_SHORT).show()
-        end
-    end)
-end
-
-local function update_status(msg)
-    -- Build now reports status only through success/failure toasts.
-end
-
-local function on_task_finished(result)
-    LuaUtil.rmDir(File(activity.getLuaExtDir("bin/.temp")))
-    if type(result) ~= "string" then
-        result = tostring(result)
-    end
-    safe_toast(result)
-end
-
-local function copy_stream(input, output)
-    LuaUtil.copyFile(input, output)
-    if input and input.close then
-        input.close()
-    end
-end
-
-local function include_project_files(out, project_dir, replace_map, md5s, errbuffer, module_root)
+local function binapk(luapath, apkpath)
+    require "import"
     import "console"
+    compile "mao"
+    compile "sign"
+    import "java.util.zip.*"
+    import "java.io.*"
+    import "mao.res.*"
+    import "apksigner.*"
+    local b = byte[2 ^ 16]
+    local function copy(input, output)
+        LuaUtil.copyFile(input, output)
+        input.close()
+        --[[local l=input.read(b)
+      while l>1 do
+        output.write(b,0,l)
+        l=input.read(b)
+      end]]
+    end
 
+    local function copy2(input, output)
+        LuaUtil.copyFile(input, output)
+    end
+
+    local temp = File(apkpath).getParentFile();
+    if (not temp.exists()) then
+
+        if (not temp.mkdirs()) then
+
+            error("create file " .. temp.getName() .. " fail");
+        end
+    end
+
+
+    local tmp = luajava.luadir .. "/tmp.apk"
+    local info = activity.getApplicationInfo()
+    local ver = activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0).versionName
+    local code = activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0).versionCode
+
+    --local zip=ZipFile(info.publicSourceDir)
+    local zipFile = File(info.publicSourceDir)
+    local fis = FileInputStream(zipFile);
+    --local checksum = CheckedInputStream(fis, Adler32());
+    local zis = ZipInputStream(BufferedInputStream(fis));
+
+    local fot = FileOutputStream(tmp)
+    --local checksum2 = CheckedOutputStream(fot, Adler32());
+
+    local out = ZipOutputStream(BufferedOutputStream(fot))
+    local f = File(luapath)
+    local errbuffer = {}
+    local replace = {}
     local checked = {}
     local lualib = {}
+    local md5s = {}
+    local libs = File(activity.ApplicationInfo.nativeLibraryDir).list()
+    libs = luajava.astable(libs)
+    for k, v in ipairs(libs) do
+        --libs[k]="lib/armeabi/"..libs[k]
+        replace[v] = true
+    end
+
+    local mdp = activity.Application.MdDir
+    local function getmodule(dir)
+        local mds = File(activity.Application.MdDir .. dir).listFiles()
+        mds = luajava.astable(mds)
+        for k, v in ipairs(mds) do
+            if mds[k].isDirectory() then
+                getmodule(dir .. mds[k].Name .. "/")
+            else
+                mds[k] = "lua" .. dir .. mds[k].Name
+                replace[mds[k]] = true
+            end
+        end
+    end
+
+    getmodule("/")
 
     local function checklib(path)
         if checked[path] then
             return
         end
+        local cp, lp
         checked[path] = true
-
         local f = io.open(path)
-        if not f then
-            return
-        end
-
-        local source = f:read("*a")
+        local s = f:read("*a")
         f:close()
-
-        for m, n in source:gmatch("require *%(? *\"([%w_]+)%.?([%w_]*)") do
-            local cp = string.format("lib%s.so", m)
-            local lp
-            local module_name = m
+        for m, n in s:gmatch("require *%(? *\"([%w_]+)%.?([%w_]*)") do
+            cp = string.format("lib%s.so", m)
             if n ~= "" then
                 lp = string.format("lua/%s/%s.lua", m, n)
-                module_name = m .. "/" .. n
+                m = m .. '/' .. n
             else
                 lp = string.format("lua/%s.lua", m)
             end
-            if replace_map[cp] then
-                replace_map[cp] = false
+            if replace[cp] then
+                replace[cp] = false
             end
-            if replace_map[lp] then
-                local next_file = string.format("%s/%s.lua", module_root, module_name)
-                checklib(next_file)
-                replace_map[lp] = false
-                lualib[lp] = next_file
+            if replace[lp] then
+                checklib(mdp .. "/" .. m .. ".lua")
+                replace[lp] = false
+                lualib[lp] = mdp .. "/" .. m .. ".lua"
             end
         end
-
-        for m, n in source:gmatch("import *%(? *\"([%w_]+)%.?([%w_]*)") do
-            local cp = string.format("lib%s.so", m)
-            local lp
-            local module_name = m
+        for m, n in s:gmatch("import *%(? *\"([%w_]+)%.?([%w_]*)") do
+            cp = string.format("lib%s.so", m)
             if n ~= "" then
                 lp = string.format("lua/%s/%s.lua", m, n)
-                module_name = m .. "/" .. n
+                m = m .. '/' .. n
             else
                 lp = string.format("lua/%s.lua", m)
             end
-            if replace_map[cp] then
-                replace_map[cp] = false
+            if replace[cp] then
+                replace[cp] = false
             end
-            if replace_map[lp] then
-                local next_file = string.format("%s/%s.lua", module_root, module_name)
-                checklib(next_file)
-                replace_map[lp] = false
-                lualib[lp] = next_file
+            if replace[lp] then
+                checklib(mdp .. "/" .. m .. ".lua")
+                replace[lp] = false
+                lualib[lp] = mdp .. "/" .. m .. ".lua"
             end
         end
     end
 
-    local function add_dir(dir_name, dir_file)
-        local entry = ZipEntry("assets/" .. dir_name)
+    replace["libluajava.so"] = false
+
+    local function addDir(out, dir, f)
+        local entry = ZipEntry("assets/" .. dir)
         out.putNextEntry(entry)
-
-        local files = dir_file.listFiles()
-        for i = 0, #files - 1 do
-            local file = files[i]
-            local name = file.getName()
-            local relative = dir_name .. name
-
-            if name == ".using" then
-                checklib(project_dir .. relative)
+        local ls = f.listFiles()
+        for n = 0, #ls - 1 do
+            local name = ls[n].getName()
+            if name==(".using") then
+                checklib(luapath .. dir .. name)
             elseif name:find("%.apk$") or name:find("%.luac$") or name:find("^%.") then
-                -- skip
             elseif name:find("%.lua$") then
-                checklib(project_dir .. relative)
-                local path, err = console.build(project_dir .. relative)
+                checklib(luapath .. dir .. name)
+                local path, err = console.build(luapath .. dir .. name)
                 if path then
-                    local zip_name = "assets/" .. relative
-                    if replace_map[zip_name] then
-                        table.insert(errbuffer, relative .. " duplicated")
+                    if replace["assets/" .. dir .. name] then
+                        table.insert(errbuffer, dir .. name .. "/.aly")
                     end
-                    out.putNextEntry(ZipEntry(zip_name))
-                    replace_map[zip_name] = true
-                    copy_stream(FileInputStream(File(path)), out)
+                    local entry = ZipEntry("assets/" .. dir .. name)
+                    out.putNextEntry(entry)
+
+                    replace["assets/" .. dir .. name] = true
+                    copy(FileInputStream(File(path)), out)
                     table.insert(md5s, LuaUtil.getFileMD5(path))
                     os.remove(path)
                 else
                     table.insert(errbuffer, err)
                 end
             elseif name:find("%.aly$") then
-                local path, err = console.build_aly(project_dir .. relative)
+                local path, err = console.build_aly(luapath .. dir .. name)
                 if path then
-                    local lua_name = relative:gsub("aly$", "lua")
-                    local zip_name = "assets/" .. lua_name
-                    if replace_map[zip_name] then
-                        table.insert(errbuffer, lua_name .. " duplicated")
+                    name = name:gsub("aly$", "lua")
+                    if replace["assets/" .. dir .. name] then
+                        table.insert(errbuffer, dir .. name .. "/.aly")
                     end
-                    out.putNextEntry(ZipEntry(zip_name))
-                    replace_map[zip_name] = true
-                    copy_stream(FileInputStream(File(path)), out)
+                    local entry = ZipEntry("assets/" .. dir .. name)
+                    out.putNextEntry(entry)
+
+                    replace["assets/" .. dir .. name] = true
+                    copy(FileInputStream(File(path)), out)
                     table.insert(md5s, LuaUtil.getFileMD5(path))
                     os.remove(path)
                 else
                     table.insert(errbuffer, err)
                 end
-            elseif file.isDirectory() then
-                add_dir(relative .. "/", file)
+            elseif ls[n].isDirectory() then
+                addDir(out, dir .. name .. "/", ls[n])
             else
-                local zip_name = "assets/" .. relative
-                out.putNextEntry(ZipEntry(zip_name))
-                replace_map[zip_name] = true
-                copy_stream(FileInputStream(file), out)
-                table.insert(md5s, LuaUtil.getFileMD5(file))
+                local entry = ZipEntry("assets/" .. dir .. name)
+                out.putNextEntry(entry)
+                replace["assets/" .. dir .. name] = true
+                copy(FileInputStream(ls[n]), out)
+                table.insert(md5s, LuaUtil.getFileMD5(ls[n]))
             end
         end
     end
 
-    add_dir("", File(project_dir))
 
-    for name, source in pairs(lualib) do
-        local path, err = console.build(source)
+    this.update("Compiling...");
+    if f.isDirectory() then
+        require "permission"
+        dofile(luapath .. "init.lua")
+        if user_permission then
+            for k, v in ipairs(user_permission) do
+                user_permission[v] = true
+            end
+        end
+
+
+        local ss, ee = pcall(addDir, out, "", f)
+        if not ss then
+            table.insert(errbuffer, ee)
+        end
+        --print(ee,dump(errbuffer),dump(replace))
+
+
+        local wel = File(luapath .. "icon.png")
+        if wel.exists() then
+            local entry = ZipEntry("res/drawable/icon.png")
+            out.putNextEntry(entry)
+            replace["res/drawable/icon.png"] = true
+            copy(FileInputStream(wel), out)
+        end
+        local wel = File(luapath .. "welcome.png")
+        if wel.exists() then
+            local entry = ZipEntry("res/drawable/welcome.png")
+            out.putNextEntry(entry)
+            replace["res/drawable/welcome.png"] = true
+            copy(FileInputStream(wel), out)
+        end
+    else
+        return "error"
+    end
+
+    --print(dump(lualib))
+    for name, v in pairs(lualib) do
+        local path, err = console.build(v)
         if path then
-            out.putNextEntry(ZipEntry(name))
-            copy_stream(FileInputStream(File(path)), out)
+            local entry = ZipEntry(name)
+            out.putNextEntry(entry)
+            copy(FileInputStream(File(path)), out)
             table.insert(md5s, LuaUtil.getFileMD5(path))
             os.remove(path)
         else
             table.insert(errbuffer, err)
         end
     end
-end
 
-local function binapk(project_dir, apkpath)
-    require "import"
-    compile "mao"
-    compile "sign"
-
-    import "apksigner.*"
-    import "mao.res.*"
-
-    local info = activity.getApplicationInfo()
-    local app_info = activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0)
-
-    local zip_in = ZipInputStream(BufferedInputStream(FileInputStream(File(info.publicSourceDir))))
-    local tmp = luajava.luadir .. "/tmp.apk"
-    local zip_out = ZipOutputStream(BufferedOutputStream(FileOutputStream(tmp)))
-
-    local f = File(project_dir)
-    if not f.isDirectory() then
-        return "Build failed: project folder not found"
-    end
-
-    local params = {}
-    local ok, load_err = pcall(loadfile(project_dir .. "init.lua", "bt", params))
-    if not ok then
-        return "Build failed: init.lua error\n" .. tostring(load_err)
-    end
-
-    local packagename = params.packagename or activity.getPackageName()
-    local appname = params.appname or tostring(info.nonLocalizedLabel or "AndroLua")
-    local appver = params.appver or app_info.versionName
-    local appcode = tonumber(params.appcode) or 1
-    local appsdk = tonumber(params.appsdk) or 24
-
-    local replace = {}
-    local errbuffer = {}
-    local md5s = {}
-
-    local libs = luajava.astable(File(activity.ApplicationInfo.nativeLibraryDir).list() or {})
-    for _, so_name in ipairs(libs) do
-        replace[so_name] = true
-    end
-
-    local function mark_modules(dir)
-        local files = luajava.astable((File(activity.Application.MdDir .. dir).listFiles()) or {})
-        for _, file in ipairs(files) do
-            if file.isDirectory() then
-                mark_modules(dir .. file.Name .. "/")
-            else
-                replace["lua" .. dir .. file.Name] = true
-            end
-        end
-    end
-
-    mark_modules("/")
-    replace["libluajava.so"] = false
-
-    update_status("Compiling Lua assets...")
-    local include_ok, include_err = pcall(include_project_files, zip_out, project_dir, replace, md5s, errbuffer, activity.Application.MdDir)
-    if not include_ok then
-        table.insert(errbuffer, include_err)
-    end
-
-    local icon = File(project_dir .. "icon.png")
-    if icon.exists() then
-        zip_out.putNextEntry(ZipEntry("res/drawable/icon.png"))
-        replace["res/drawable/icon.png"] = true
-        copy_stream(FileInputStream(icon), zip_out)
-    end
-
-    local welcome = File(project_dir .. "welcome.png")
-    if welcome.exists() then
-        zip_out.putNextEntry(ZipEntry("res/drawable/welcome.png"))
-        replace["res/drawable/welcome.png"] = true
-        copy_stream(FileInputStream(welcome), zip_out)
-    end
-
-    local function include_project_libs(root, abi)
-        local abi_dir = File(root .. "/" .. abi)
-        if not abi_dir.exists() or not abi_dir.isDirectory() then
-            return
-        end
-        local files = luajava.astable(abi_dir.listFiles() or {})
-        for _, file in ipairs(files) do
-            if file.isFile() and tostring(file.Name):find("%.so$") then
-                local entry_name = "lib/" .. abi .. "/" .. tostring(file.Name)
-                zip_out.putNextEntry(ZipEntry(entry_name))
-                replace[entry_name] = true
-                copy_stream(FileInputStream(file), zip_out)
-                table.insert(md5s, LuaUtil.getFileMD5(file))
-            end
-        end
-    end
-
-    include_project_libs(project_dir .. "lib", "arm64-v8a")
-    include_project_libs(project_dir .. "lib", "armeabi-v7a")
-    include_project_libs(project_dir .. "libs", "arm64-v8a")
-    include_project_libs(project_dir .. "libs", "armeabi-v7a")
-
-    update_status("Packaging APK...")
-
-    local function touint32(i)
+    function touint32(i)
         local code = string.format("%08x", i)
-        local out = {}
+        local uint = {}
         for n in code:gmatch("..") do
-            table.insert(out, 1, string.char(tonumber(n, 16)))
+            table.insert(uint, 1, string.char(tonumber(n, 16)))
         end
-        return table.concat(out)
+        return table.concat(uint)
     end
 
-    local entry = zip_in.getNextEntry()
+    this.update("Packaging...");
+    local entry = zis.getNextEntry();
     while entry do
         local name = entry.getName()
         local lib = name:match("([^/]+%.so)$")
-        local skip = replace[name]
-            or name:find("^assets/")
-            or name:find("^lua/")
-            or name:find("META%-INF")
-
-        if not skip then
-            zip_out.putNextEntry(ZipEntry(name))
-            if name == "AndroidManifest.xml" then
+        if replace[name] then
+        elseif lib and replace[lib] then
+        elseif name:find("^assets/") then
+        elseif name:find("^lua/") then
+        elseif name:find("META%-INF") then
+        else
+            local entry = ZipEntry(name)
+            out.putNextEntry(entry)
+            if entry.getName() == "AndroidManifest.xml" then
+                if path_pattern and #path_pattern > 1 then
+                    path_pattern = ".*\\\\." .. path_pattern:match("%w+$")
+                end
                 local list = ArrayList()
-                local xml = AXmlDecoder.read(list, zip_in)
+                local xml = AXmlDecoder.read(list, zis)
                 local req = {
                     [activity.getPackageName()] = packagename,
                     [info.nonLocalizedLabel] = appname,
-                    [app_info.versionName] = appver,
-                    [".*\\\\.alp"] = params.path_pattern and (".*\\\\." .. tostring(params.path_pattern):match("%w+$")) or "",
+                    [ver] = appver,
+                    [".*\\\\.alp"] = path_pattern or "",
                     [".*\\\\.lua"] = "",
-                    [".*\\\\.luac"] = ""
+                    [".*\\\\.luac"] = "",
                 }
-
-                if params.user_permission then
-                    for _, permission in ipairs(params.user_permission) do
-                        params.user_permission[permission] = true
-                    end
-                end
-
-                for i = 0, list.size() - 1 do
-                    local value = list.get(i)
-                    if req[value] then
-                        list.set(i, req[value])
-                    elseif params.user_permission then
-                        local perm = value:match("%.permission%.([%w_]+)$")
-                        if perm and (not params.user_permission[perm]) then
-                            list.set(i, "")
+                for n = 0, list.size() - 1 do
+                    local v = list.get(n)
+                    if req[v] then
+                        list.set(n, req[v])
+                    elseif user_permission then
+                        local p = v:match("%.permission%.([%w_]+)$")
+                        if p and (not user_permission[p]) then
+                            list.set(n, "")
                         end
                     end
                 end
-
                 local pt = activity.getLuaPath(".tmp")
                 local fo = FileOutputStream(pt)
                 xml.write(list, fo)
+                local code = activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0).versionCode
                 fo.close()
+                local f = io.open(pt)
+                local s = f:read("a")
+                f:close()
+                s = string.gsub(s, touint32(code), touint32(tointeger(appcode) or 1),1)
+                s = string.gsub(s, touint32(18), touint32(tointeger(appsdk) or 18),1)
 
-                local rf = io.open(pt)
-                local content = rf:read("*a")
-                rf:close()
-
-                content = content:gsub(touint32(app_info.versionCode), touint32(appcode), 1)
-                content = content:gsub(touint32(18), touint32(appsdk), 1)
-
-                local wf = io.open(pt, "w")
-                wf:write(content)
-                wf:close()
-
-                copy_stream(FileInputStream(pt), zip_out)
+                local f = io.open(pt, "w")
+                f:write(s)
+                f:close()
+                local fi = FileInputStream(pt)
+                copy(fi, out)
                 os.remove(pt)
             elseif not entry.isDirectory() then
-                LuaUtil.copyFile(zip_in, zip_out)
+                copy2(zis, out)
             end
         end
-        entry = zip_in.getNextEntry()
+        entry = zis.getNextEntry()
     end
+    out.setComment(table.concat(md5s))
+    --print(table.concat(md5s,"/n"))
+    zis.close();
+    out.closeEntry()
+    out.close()
 
-    zip_in.close()
-    zip_out.setComment(table.concat(md5s))
-    zip_out.closeEntry()
-    zip_out.close()
-
-    if #errbuffer > 0 then
+    if #errbuffer == 0 then
+        this.update("Signing...");
+        os.remove(apkpath)
+        Signer.sign(tmp, apkpath)
         os.remove(tmp)
-        return "Build failed:\n" .. table.concat(errbuffer, "\n")
+        activity.installApk(apkpath)
+        --[[import "android.net.*"
+        import "android.content.*"
+        i = Intent(Intent.ACTION_VIEW);
+        i.setDataAndType(activity.getUriForFile(File(apkpath)), "application/vnd.android.package-archive");
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        this.update("Opening...");
+        activity.startActivityForResult(i, 0);]]
+        return "Packaging successful:" .. apkpath
+    else
+        os.remove(tmp)
+        this.update("Packaging error:\n " .. table.concat(errbuffer, "\n"));
+        return "Packaging error:\n " .. table.concat(errbuffer, "\n")
     end
-
-    update_status("Signing APK...")
-    os.remove(apkpath)
-    Signer.sign(tmp, apkpath)
-    os.remove(tmp)
-    activity.installApk(apkpath)
-    return "Build success: " .. apkpath
 end
 
-local function build(path)
-    local function notify(message)
-        if type(safe_toast) == "function" then
-            safe_toast(message)
-            return
-        end
-        local ctx = rawget(_G, "activity")
-        if not ctx then
-            return
-        end
-        pcall(function()
-            local ToastClass = luajava.bindClass("android.widget.Toast")
-            local text = tostring(message or "")
-            local action = function()
-                ToastClass.makeText(ctx, text, ToastClass.LENGTH_SHORT).show()
-            end
-            if ctx.runOnUiThread then
-                ctx.runOnUiThread(action)
-            else
-                action()
-            end
-        end)
+--luabindir=activity.getLuaExtDir("bin")
+--print(activity.getLuaExtPath("bin","a"))
+local function bin(path)
+    local p = {}
+    local e, s = pcall(loadfile(path .. "init.lua", "bt", p))
+    if e then
+        create_error_dlg2()
+        create_bin_dlg()
+        bin_dlg.show()
+        activity.newTask(binapk, update, callback).execute { path, activity.getLuaExtPath("bin", p.appname .. "_" .. p.appver .. ".apk") }
+    else
+        Toast.makeText(activity, "Project configuration file error." .. s, Toast.LENGTH_SHORT).show()
     end
-
-    notify("Building APK...")
-
-    local project = {}
-    local ok, loaded_or_err = pcall(loadfile, path .. "init.lua", "bt", project)
-    if not ok or type(loaded_or_err) ~= "function" then
-        notify("Project config file error: " .. tostring(loaded_or_err))
-        return
-    end
-    local ok2, runtime_err = pcall(loaded_or_err)
-    if not ok2 then
-        notify("Project config file runtime error: " .. tostring(runtime_err))
-        return
-    end
-
-    local builder = project.binapk or binapk
-    if type(builder) ~= "function" then
-        notify("Build task loader error: binapk is invalid.")
-        return
-    end
-
-    local ctx = rawget(_G, "activity")
-    if not ctx then
-        return "Build failed: activity context unavailable"
-    end
-    local output = ctx.getLuaExtPath("bin", tostring(project.appname or "app") .. "_" .. tostring(project.appver or "1.0") .. ".apk")
-    ctx.newTask(builder, update_status, on_task_finished).execute { path, output }
 end
 
-return build
+--bin(activity.getLuaExtDir("project/demo").."/")
+return bin
