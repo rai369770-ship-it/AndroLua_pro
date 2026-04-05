@@ -380,23 +380,55 @@ local function binapk(project_dir, apkpath)
 end
 
 local function build(path)
-    safe_toast("Building APK...")
+    local function notify(message)
+        if type(safe_toast) == "function" then
+            safe_toast(message)
+            return
+        end
+        local ctx = rawget(_G, "activity")
+        if not ctx then
+            return
+        end
+        pcall(function()
+            local ToastClass = luajava.bindClass("android.widget.Toast")
+            local text = tostring(message or "")
+            local action = function()
+                ToastClass.makeText(ctx, text, ToastClass.LENGTH_SHORT).show()
+            end
+            if ctx.runOnUiThread then
+                ctx.runOnUiThread(action)
+            else
+                action()
+            end
+        end)
+    end
 
-    local p = {}
-    local ok, err = pcall(loadfile(path .. "init.lua", "bt", p))
-    if not ok then
-        safe_toast("Project config file error: " .. tostring(err))
+    notify("Building APK...")
+
+    local project = {}
+    local ok, loaded_or_err = pcall(loadfile, path .. "init.lua", "bt", project)
+    if not ok or type(loaded_or_err) ~= "function" then
+        notify("Project config file error: " .. tostring(loaded_or_err))
+        return
+    end
+    local ok2, runtime_err = pcall(loaded_or_err)
+    if not ok2 then
+        notify("Project config file runtime error: " .. tostring(runtime_err))
         return
     end
 
-    local builder = p.binapk or binapk
+    local builder = project.binapk or binapk
     if type(builder) ~= "function" then
-        safe_toast("Build task loader error: binapk is invalid.")
+        notify("Build task loader error: binapk is invalid.")
         return
     end
 
-    local output = activity.getLuaExtPath("bin", tostring(p.appname or "app") .. "_" .. tostring(p.appver or "1.0") .. ".apk")
-    activity.newTask(builder, update_status, on_task_finished).execute { path, output }
+    local ctx = rawget(_G, "activity")
+    if not ctx then
+        return "Build failed: activity context unavailable"
+    end
+    local output = ctx.getLuaExtPath("bin", tostring(project.appname or "app") .. "_" .. tostring(project.appver or "1.0") .. ".apk")
+    ctx.newTask(builder, update_status, on_task_finished).execute { path, output }
 end
 
 return build

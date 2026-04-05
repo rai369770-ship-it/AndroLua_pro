@@ -86,19 +86,35 @@ public class LuaDexLoader {
         int i = name.indexOf(".");
         if (i > 0)
             fn = name.substring(0, i);
+        if (fn.endsWith(".so"))
+            fn = fn.substring(0, fn.length() - 3);
         if (fn.startsWith("lib"))
             fn = fn.substring(3);
-        String libDir = mContext.getContext().getDir(fn, Context.MODE_PRIVATE).getAbsolutePath();
-        String libPath = libDir + "/lib" + fn + ".so";
-        File f = new File(libPath);
-        if (!f.exists()) {
-            f = new File(luaDir + "/libs/lib" + fn + ".so");
-            if (!f.exists())
-                throw new LuaException("can not find lib " + name);
-            LuaUtil.copyFile(luaDir + "/libs/lib" + fn + ".so", libPath);
-
+        String soName = "lib" + fn + ".so";
+        String privateLibDir = mContext.getContext().getDir(fn, Context.MODE_PRIVATE).getAbsolutePath();
+        String privateLibPath = privateLibDir + "/" + soName;
+        File target = new File(privateLibPath);
+        if (!target.exists()) {
+            String[] candidates = new String[]{
+                    luaDir + "/libs/" + soName,
+                    luaDir + "/lib/" + soName,
+                    luaDir + "/lib/arm64-v8a/" + soName,
+                    luaDir + "/lib/armeabi-v7a/" + soName,
+                    luaDir + "/lib/armeabi/" + soName
+            };
+            File source = null;
+            for (String candidate : candidates) {
+                File f = new File(candidate);
+                if (f.exists()) {
+                    source = f;
+                    break;
+                }
+            }
+            if (source == null)
+                throw new LuaException("can not find lib " + name + " in " + luaDir + "/libs or ABI lib folders");
+            LuaUtil.copyFile(source.getAbsolutePath(), privateLibPath);
         }
-        libCache.put(fn, libPath);
+        libCache.put(fn, privateLibPath);
     }
 
     public HashMap<String, String> getLibrarys() {

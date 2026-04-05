@@ -731,19 +731,17 @@ public class LuaActivity extends Activity implements LuaBroadcastReceiver.OnRece
     }
 */
     public Object loadLib(String name) throws LuaException {
-        int i = name.indexOf(".");
         String fn = name;
-        if (i > 0)
+        int i = name.indexOf(".");
+        if (i > 0) {
             fn = name.substring(0, i);
-        File f = new File(libDir + "/lib" + fn + ".so");
-        if (!f.exists()) {
-            f = new File(luaDir + "/lib" + fn + ".so");
-            if (!f.exists())
-                throw new LuaException("can not find lib " + name);
-            LuaUtil.copyFile(luaDir + "/lib" + fn + ".so", libDir + "/lib" + fn + ".so");
         }
+        if (fn.startsWith("lib")) {
+            fn = fn.substring(3);
+        }
+        mLuaDexLoader.loadLib(fn);
         LuaObject require = L.getLuaObject("require");
-        return require.call(name);
+        return require.call(fn);
     }
 
     public void createShortcut(String text, String name) {
