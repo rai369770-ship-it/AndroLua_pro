@@ -399,33 +399,39 @@ local function binapk(project_dir, apkpath)
 end
 
 local function build(path)
-    local dlg_builder = (type(ensure_bin_dlg) == "function") and ensure_bin_dlg or function()
-        if not bin_dlg then
-            bin_dlg = ProgressDialog(activity)
-            bin_dlg.setTitle("Building APK")
-            bin_dlg.setMax(100)
+    run_on_ui(function()
+        local dlg_builder = (type(ensure_bin_dlg) == "function") and ensure_bin_dlg or function()
+            if not bin_dlg then
+                bin_dlg = ProgressDialog(activity)
+                bin_dlg.setTitle("Building APK")
+                bin_dlg.setMax(100)
+            end
+            return bin_dlg
         end
-        return bin_dlg
-    end
 
-    dlg_builder().show()
+        dlg_builder().show()
+    end)
 
     local p = {}
     local ok, err = pcall(loadfile(path .. "init.lua", "bt", p))
     if not ok then
         safe_toast("Project config file error: " .. tostring(err))
-        if bin_dlg then
-            bin_dlg.hide()
-        end
+        run_on_ui(function()
+            if bin_dlg then
+                bin_dlg.hide()
+            end
+        end)
         return
     end
 
     local builder = p.binapk or binapk
     if type(builder) ~= "function" then
         safe_toast("Build task loader error: binapk is invalid.")
-        if bin_dlg then
-            bin_dlg.hide()
-        end
+        run_on_ui(function()
+            if bin_dlg then
+                bin_dlg.hide()
+            end
+        end)
         return
     end
 
