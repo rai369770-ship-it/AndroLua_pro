@@ -412,6 +412,28 @@ local function setattribute(root,view,params,k,v,ids)
     else
       view.setTextSize(v)
     end
+  elseif k=="textStyle" then
+    local style=v
+    if type(style)=="string" then
+      style=string.lower(style)
+      if style=="bold" then
+        style=1
+      elseif style=="italic" then
+        style=2
+      elseif style=="bold_italic" or style=="bolditalic" then
+        style=3
+      elseif style=="normal" then
+        style=0
+      else
+        style=checkValue(v)
+      end
+    else
+      style=checkValue(style)
+    end
+    local tf=view.getTypeface and view.getTypeface()
+    if view.setTypeface then
+      view.setTypeface(tf,style or 0)
+    end
   elseif k=="textAppearance" then
     view.setTextAppearance(context,checkattr(v))
   elseif k=="ellipsize" then

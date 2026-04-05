@@ -399,7 +399,16 @@ local function binapk(project_dir, apkpath)
 end
 
 local function build(path)
-    ensure_bin_dlg().show()
+    local dlg_builder = (type(ensure_bin_dlg) == "function") and ensure_bin_dlg or function()
+        if not bin_dlg then
+            bin_dlg = ProgressDialog(activity)
+            bin_dlg.setTitle("Building APK")
+            bin_dlg.setMax(100)
+        end
+        return bin_dlg
+    end
+
+    dlg_builder().show()
 
     local p = {}
     local ok, err = pcall(loadfile(path .. "init.lua", "bt", p))
