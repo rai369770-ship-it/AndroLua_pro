@@ -772,19 +772,15 @@ public class LuaService extends Service implements LuaContext,LuaBroadcastReceiv
 	}
 
 	public Object loadLib(String name) throws LuaException {
-		int i=name.indexOf(".");
 		String fn = name;
+		int i = name.indexOf(".");
 		if (i > 0)
 			fn = name.substring(0, i);
-		File f=new File(libDir + "/lib" + fn + ".so");
-		if (!f.exists()) {
-			f = new File(luaDir + "/lib" + fn + ".so");
-			if (!f.exists())
-				throw new LuaException("can not find lib " + name);
-			copyFile(luaDir + "/lib" + fn + ".so", libDir + "/lib" + fn + ".so");
-		}
+		if (fn.startsWith("lib"))
+			fn = fn.substring(3);
+		mLuaDexLoader.loadLib(fn);
 		LuaObject require=L.getLuaObject("require");
-		return require.call(name);
+		return require.call(fn);
 	}
 
 	private void copyFile(String oldPath, String newPath) {

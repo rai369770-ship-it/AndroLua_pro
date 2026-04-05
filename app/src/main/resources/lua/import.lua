@@ -47,6 +47,15 @@ local function normalize_classname(classname)
     return classname
 end
 
+local class_aliases = {
+    ["androidx.fragment.app.Fragment"] = "android.support.v4.app.Fragment",
+    ["androidx.fragment.app.FragmentActivity"] = "android.support.v4.app.FragmentActivity",
+}
+
+local function resolve_class_alias(packagename)
+    return class_aliases[packagename]
+end
+
 local function normalize_luaopen(name)
     return (name or ""):gsub("%.", "_"):gsub("%-", "_")
 end
@@ -201,6 +210,15 @@ local function import_class(packagename)
     local class = try_import_name(packagename)
     if class then
         return class
+    end
+
+    local alias = resolve_class_alias(packagename)
+    if alias then
+        class = try_import_name(alias)
+        if class then
+            loaded[packagename] = class
+            return class
+        end
     end
 
     local inner = packagename
@@ -376,6 +394,59 @@ end
 function _M.compile(name)
     append_unique(dexes, luacontext.loadDex(name))
     rebuild_loaders()
+end
+
+local function sanitize_lib_name(name)
+    local normalized = tostring(name or ""):gsub("%.so$", "")
+    normalized = normalized:gsub("^lib", "")
+    return normalized
+end
+
+local function ensure_dex_loaded(path)
+    local dex = luacontext.loadDex(path)
+    append_unique(dexes, dex)
+    rebuild_loaders()
+    return dex
+end
+
+function _M.loaddex(path)
+    return ensure_dex_loaded(path)
+end
+
+function _M.loadDex(path)
+    return ensure_dex_loaded(path)
+end
+
+function _M.loadlib(name)
+    local lib = sanitize_lib_name(name)
+    if luacontext and luacontext.loadLib then
+        local ok = pcall(luacontext.loadLib, lib)
+        if ok then
+            return true
+        end
+    end
+    return _M.require_native(lib)
+end
+
+function _M.loadLib(name)
+    return _M.loadlib(name)
+end
+
+function _M.load(chunk, chunkname, mode, env)
+    if type(chunk) == "function" then
+        return chunk
+    end
+    if type(chunk) ~= "string" then
+        error("bad argument #1 to 'load' (string/function expected)", 2)
+    end
+    local compiler, err = loadstring(chunk, chunkname)
+    if not compiler then
+        return nil, err
+    end
+    if env and setfenv then
+        setfenv(compiler, env)
+    end
+    return compiler
 end
 
 function _M.enum(e)
