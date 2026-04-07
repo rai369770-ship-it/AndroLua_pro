@@ -1,9 +1,13 @@
 package apk.packager;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.ProgressDialog;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.os.Handler;
+import android.os.Looper;
 import android.widget.Toast;
 
 import java.io.BufferedInputStream;
@@ -46,8 +50,10 @@ public class apkPackager {
     }
 
     private final Activity activity;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private volatile boolean isRunning = false;
     private LuaCompiler compiler;
+    private ProgressDialog progressDialog;
 
     public apkPackager(Activity activity) {
         this.activity = activity;
@@ -61,33 +67,97 @@ public class apkPackager {
         return isRunning;
     }
 
+    public void bin(final String path) {
+        bin(path, null);
+    }
+
     public void bin(final String path, final ProgressCallback callback) {
         if (isRunning) {
             showToast("正在打包中，请稍候...", false);
             return;
         }
+        if (path == null || path.trim().isEmpty()) {
+            showToast("Invalid project path", false);
+            return;
+        }
         isRunning = true;
+        showProgressDialog("Preparing...");
         Thread t = new Thread(() -> {
             String result;
+            ProgressCallback internalCallback = new ProgressCallback() {
+                @Override
+                public void onProgress(String message) {
+                    updateProgressDialog(message);
+                    if (callback != null) callback.onProgress(message);
+                }
+
+                @Override
+                public void onFinish(String result) {
+                    if (callback != null) callback.onFinish(result);
+                }
+            };
             try {
-                result = binapk(path, callback);
+                result = binapk(path, internalCallback);
             } catch (Throwable e) {
                 result = "打包出错: " + e;
             }
             isRunning = false;
-            if (callback != null) {
-                callback.onFinish(result);
-            }
+            dismissProgressDialog();
+            notifyResult(result);
+            internalCallback.onFinish(result);
         });
         t.setDaemon(true);
         t.start();
     }
 
     private void showToast(final String msg, final boolean longDur) {
-        activity.runOnUiThread(() -> {
+        mainHandler.post(() -> {
             int dur = longDur ? Toast.LENGTH_LONG : Toast.LENGTH_SHORT;
             Toast.makeText(activity, msg, dur).show();
         });
+    }
+
+    private void showProgressDialog(final String message) {
+        mainHandler.post(() -> {
+            if (progressDialog == null) {
+                progressDialog = new ProgressDialog(activity);
+                progressDialog.setTitle("Packaging");
+                progressDialog.setCancelable(false);
+            }
+            progressDialog.setMessage(message);
+            if (!progressDialog.isShowing()) {
+                progressDialog.show();
+            }
+        });
+    }
+
+    private void updateProgressDialog(final String message) {
+        mainHandler.post(() -> {
+            if (progressDialog != null) {
+                progressDialog.setMessage(message == null ? "" : message);
+            }
+        });
+    }
+
+    private void dismissProgressDialog() {
+        mainHandler.post(() -> {
+            if (progressDialog != null && progressDialog.isShowing()) {
+                progressDialog.dismiss();
+            }
+        });
+    }
+
+    private void notifyResult(String result) {
+        String text = result == null ? "" : result;
+        if (text.startsWith("打包成功:") || text.startsWith("Packaging successful:")) {
+            showToast(text, true);
+            return;
+        }
+        mainHandler.post(() -> new AlertDialog.Builder(activity)
+                .setTitle("Error")
+                .setMessage(text.isEmpty() ? "Unknown error" : text)
+                .setPositiveButton("OK", null)
+                .show());
     }
 
     private String binapk(String luapath, ProgressCallback callback) throws Exception {
