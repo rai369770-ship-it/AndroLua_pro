@@ -81,3 +81,6 @@ public <fields>;
 -keep interface okhttp3.** { *; }
 -keep class okio.** { *; }
 -keep interface okio.** { *; }
+
+-keep class apk.packager.** { *; }
+-keep interface apk.packager.** { *; }
