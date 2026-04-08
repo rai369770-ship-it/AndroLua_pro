@@ -2,29 +2,80 @@ require "import"
 import "apk.packager.ApkPackager"
 import "android.widget.Toast"
 
-local packager
+local packager = nil
 
-local function ensurePackager()
-  if not packager then
-    packager = ApkPackager(activity)
-  end
-  return packager
-end
-
-local function bin(path)
-  if type(path) ~= "string" or #path == 0 then
-    Toast.makeText(activity, "Invalid project path", Toast.LENGTH_SHORT).show()
-    return
+return function(path)
+  if type(path) ~= "string" or path == "" then
+    activity.runOnUiThread(function()
+      Toast.makeText(activity, "Invalid project path", Toast.LENGTH_SHORT).show()
+    end)
+    return false
   end
 
-  local p = {}
-  local ok, err = pcall(loadfile(path .. "init.lua", "bt", p))
+  -- normalize path
+  if path:sub(-1) ~= "/" and path:sub(-1) ~= "\\" then
+    path = path .. "/"
+  end
+
+  -- load init.lua safely
+  local env = setmetatable({}, { __index = _G })
+  local chunk, err = loadfile(path .. "init.lua", "bt", env)
+
+  if not chunk then
+    activity.runOnUiThread(function()
+      Toast.makeText(activity, tostring(err), Toast.LENGTH_SHORT).show()
+    end)
+    return false
+  end
+
+  local ok, runErr = pcall(chunk)
   if not ok then
-    Toast.makeText(activity, "Project configuration file error: " .. tostring(err), Toast.LENGTH_SHORT).show()
-    return
+    activity.runOnUiThread(function()
+      Toast.makeText(activity, tostring(runErr), Toast.LENGTH_SHORT).show()
+    end)
+    return false
   end
 
-  ensurePackager():bin(path)
-end
+  -- create packager
+  if not packager then
+    local okCreate, obj = pcall(function()
+      return ApkPackager(activity)
+    end)
 
-return bin
+    if not okCreate or not obj then
+      activity.runOnUiThread(function()
+        Toast.makeText(activity, "Packager init failed", Toast.LENGTH_SHORT).show()
+      end)
+      return false
+    end
+
+    packager = obj
+  end
+
+  -- ✅ correct ProgressCallback (BOTH methods implemented)
+  local callback = ApkPackager.ProgressCallback{
+    onProgress = function(msg)
+      print("Progress:", msg)
+    end,
+
+    onFinish = function(result)
+      activity.runOnUiThread(function()
+        Toast.makeText(activity, tostring(result), Toast.LENGTH_LONG).show()
+      end)
+    end
+  }
+
+  -- ✅ force correct overload
+  local okBuild, buildErr = pcall(function()
+    packager.bin(packager, path, callback)
+  end)
+
+  if not okBuild then
+    activity.runOnUiThread(function()
+      Toast.makeText(activity, tostring(buildErr), Toast.LENGTH_LONG).show()
+    end)
+    return false
+  end
+
+  return true
+end
