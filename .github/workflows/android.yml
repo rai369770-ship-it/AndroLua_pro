@@ -54,9 +54,6 @@ jobs:
       - name: Scan JNI sources
         run: gradle --no-daemon :app:scanNativeSources
 
-      - name: Build debug APK (includes externalNativeBuild)
-        run: gradle --no-daemon :app:assembleDebug
-
       - name: Build release APK (includes externalNativeBuild)
         run: gradle --no-daemon :app:assembleRelease
 
@@ -65,5 +62,4 @@ jobs:
         with:
           name: androlua-professional-apks
           path: |
-            app/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/release/*.apk
