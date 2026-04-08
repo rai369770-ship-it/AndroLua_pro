@@ -52,8 +52,8 @@ return function(path)
     packager = obj
   end
 
-  -- ✅ correct ProgressCallback (BOTH methods implemented)
-  local callback = ApkPackager.ProgressCallback{
+  -- Create Java interface proxy for ApkPackager.ProgressCallback.
+  local callback = luajava.createProxy("apk.packager.ApkPackager$ProgressCallback", {
     onProgress = function(msg)
       print("Progress:", msg)
     end,
@@ -63,11 +63,11 @@ return function(path)
         Toast.makeText(activity, tostring(result), Toast.LENGTH_LONG).show()
       end)
     end
-  }
+  })
 
-  -- ✅ force correct overload
+  -- Call the Java instance method with the right signature: bin(String, ProgressCallback).
   local okBuild, buildErr = pcall(function()
-    packager.bin(packager, path, callback)
+    packager:bin(path, callback)
   end)
 
   if not okBuild then
