@@ -1,17 +1,12 @@
 require "import"
 import "apk.packager.ApkPackager"
-import "apk.packager.apkPackager"
 import "android.widget.Toast"
 
 local packager
 
 local function ensurePackager()
   if not packager then
-    if ApkPackager then
-      packager = ApkPackager(activity)
-    else
-      packager = apkPackager(activity)
-    end
+    packager = ApkPackager(activity)
   end
   return packager
 end
