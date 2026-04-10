@@ -1708,9 +1708,20 @@ local function adds()
     end
     return buf
 end
-task(adds, function(buf)
-    editorAddNames(buf)
-end)
+local runTask = task
+if type(runTask) ~= "function" and activity and activity.task then
+    runTask = function(...)
+        return activity.task(...)
+    end
+end
+
+if type(runTask) == "function" then
+    runTask(adds, function(buf)
+        editorAddNames(buf)
+    end)
+else
+    editorAddNames(adds())
+end
 
 local buf={}
 local tmp={}
