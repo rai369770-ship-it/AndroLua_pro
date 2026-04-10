@@ -7,7 +7,7 @@ activity.setTheme(autotheme())
 activity.setTitle("LogCat")
 edit=EditText(activity)
 
-edit.Hint="输入关键字"
+edit.Hint="Enter keyword"
 edit.Width=activity.Width/3
 edit.SingleLine=true
 edit.addTextChangedListener{
@@ -19,7 +19,7 @@ edit.addTextChangedListener{
 --添加菜单
 items={"All","Lua","Test","Tcc","Error","Warning","Info","Debug","Verbose","Clear"}
 function onCreateOptionsMenu(menu)
-  me=menu.add("搜索").setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+  me=menu.add("Search").setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
   me.setActionView(edit)
   for k,v in ipairs(items) do
     m=menu.add(v)
@@ -31,7 +31,7 @@ function onMenuItemSelected(id,item)
   if func[item.getTitle()] then
     func[item.getTitle()]()
    else
-    print(item,"功能开发中。。。")
+    print(item,"Feature in development...")
   end
 end
 
@@ -131,7 +131,7 @@ cm=activity.getSystemService(activity.CLIPBOARD_SERVICE)
 function copy(str)
   local cd = ClipData.newPlainText("label",str)
   cm.setPrimaryClip(cd)
-  Toast.makeText(activity,"已复制的剪切板",1000).show()
+  Toast.makeText(activity,"Copied to clipboard",1000).show()
 end
 --[[adapter.Filter=function(o,n,s)
   for v in each(o) do

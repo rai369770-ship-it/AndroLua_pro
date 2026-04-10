@@ -14,7 +14,7 @@ function onMenuItemSelected(id,item)
   if func[item.getTitle()] then
     func[item.getTitle()]()
   else
-    print(item,"功能开发中。。。")
+    print(item,"Feature in development...")
   end
 end
 

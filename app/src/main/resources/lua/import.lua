@@ -15,12 +15,47 @@ dexes = luajava.astable(luacontext.getClassLoaders())
 local libs = luacontext.getLibrarys()
 
 local function libsloader(path)
-    local p = libs[path:match("^%a+")]
-    if p then
-        return assert(package.loadlib(p, "luaopen_" .. (path:gsub("%.", "_")))), p
-    else
-        return "\n\tno file ./libs/lib" .. path .. ".so"
+    local module = path:match("^%a+")
+    if not module then
+        return "\n\tinvalid module name " .. tostring(path)
     end
+
+    local keys = {
+        module,
+        path,
+        path:gsub("%.", "_")
+    }
+
+    local candidates = {}
+    for _, key in ipairs(keys) do
+        local cached = libs[key]
+        if cached then
+            table.insert(candidates, cached)
+        end
+        table.insert(candidates, luacontext.getLuaDir() .. "/libs/lib" .. key .. ".so")
+        table.insert(candidates, luacontext.getLuaDir() .. "/lib/lib" .. key .. ".so")
+        table.insert(candidates, luacontext.getLuaDir() .. "/lib/arm64-v8a/lib" .. key .. ".so")
+        table.insert(candidates, luacontext.getLuaDir() .. "/lib/armeabi-v7a/lib" .. key .. ".so")
+        table.insert(candidates, luacontext.getLuaDir() .. "/lib/armeabi/lib" .. key .. ".so")
+    end
+
+    local seen = {}
+    for _, soPath in ipairs(candidates) do
+        if soPath and not seen[soPath] then
+            seen[soPath] = true
+            local file = io.open(soPath)
+            if file then
+                file:close()
+                local loader = package.loadlib(soPath, "luaopen_" .. (path:gsub("%.", "_")))
+                    or package.loadlib(soPath, "luaopen_" .. module)
+                if loader then
+                    return loader, soPath
+                end
+            end
+        end
+    end
+
+    return "\n\tno file ./libs/lib" .. path .. ".so"
 end
 
 table.insert(package.searchers, libsloader)
@@ -221,282 +256,45 @@ function _M.enum(e)
     end
 end
 
+
 function _M.each(o)
-    local iter = o.iterator()
+    local len = o.length
+    local i = 0
     return function()
-        if iter.hasNext() then
-            return iter.next()
+        if i < len then
+            i = i + 1
+            return o[i - 1]
         end
     end
 end
 
-local NIL = {}
-setmetatable(NIL, { __tostring = function() return "nil" end })
 
 function _M.dump(o)
-    local t = {}
-    local _t = {}
-    local _n = {}
-    local space, deep = string.rep(' ', 2), 0
-    local function _ToString(o, _k)
-        if type(o) == ('number') then
-            table.insert(t, o)
-        elseif type(o) == ('string') then
-            table.insert(t, string.format('%q', o))
-        elseif type(o) == ('table') then
-            local mt = getmetatable(o)
-            if mt and mt.__tostring then
-                table.insert(t, tostring(o))
-            else
-                deep = deep + 2
-                table.insert(t, '{')
-
-                for k, v in pairs(o) do
-                    if v == _G then
-                        table.insert(t, string.format('\r\n%s%s\t=%s ;', string.rep(space, deep - 1), k, "_G"))
-                    elseif v ~= package.loaded then
-                        if tonumber(k) then
-                            k = string.format('[%s]', k)
-                        else
-                            k = string.format('[\"%s\"]', k)
-                        end
-                        table.insert(t, string.format('\r\n%s%s\t= ', string.rep(space, deep - 1), k))
-                        if v == NIL then
-                            table.insert(t, string.format('%s ;',"nil"))
-                        elseif type(v) == ('table') then
-                            if _t[tostring(v)] == nil then
-                                _t[tostring(v)] = v
-                                local _k = _k .. k
-                                _t[tostring(v)] = _k
-                                _ToString(v, _k)
-                            else
-                                table.insert(t, tostring(_t[tostring(v)]))
-                                table.insert(t, ';')
-                            end
-                        else
-                            _ToString(v, _k)
-                        end
-                    end
-                end
-                table.insert(t, string.format('\r\n%s}', string.rep(space, deep - 1)))
-                deep = deep - 2
+    if type(o) == "userdata" then
+        local out = {}
+        local c = o.getClass()
+        while c do
+            local fs = c.getDeclaredFields()
+            for _, v in ipairs(fs) do
+                v.setAccessible(true)
+                table.insert(out, string.format("%s = %s", v.Name, v.get(o)))
             end
-        else
-            table.insert(t, tostring(o))
+            c = c.getSuperclass()
         end
-        table.insert(t, " ;")
-        return t
-    end
-
-    t = _ToString(o, '')
-    return table.concat(t)
-end
-
-
-function _M.printstack()
-    local stacks = {}
-    for m = 2, 16 do
-        local dbs = {}
-        local info = debug.getinfo(m)
-        if info == nil then
-            break
-        end
-        table.insert(stacks, dbs)
-        dbs.info = info
-        local func = info.func
-        local nups = info.nups
-        local ups = {}
-        dbs.upvalues = ups
-        for n = 1, nups do
-            local n, v = debug.getupvalue(func, n)
-            if v == nil then
-                v = NIL
-            end
-            if string.byte(n) == 40 then
-                if ups[n] == nil then
-                    ups[n] = {}
-                end
-                table.insert(ups[n], v)
-            else
-                ups[n] = v
-            end
-        end
-
-        local lps = {}
-        dbs.localvalues = lps
-        lps.vararg = {}
-        --lps.temporary={}
-        for n = -1, -255, -1 do
-            local k, v = debug.getlocal(m, n)
-            if k == nil then
-                break
-            end
-            if v == nil then
-                v = NIL
-            end
-            table.insert(lps.vararg, v)
-        end
-        for n = 1, 255 do
-            local n, v = debug.getlocal(m, n)
-            if n == nil then
-                break
-            end
-            if v == nil then
-                v = NIL
-            end
-            if string.byte(n) == 40 then
-                if lps[n] == nil then
-                    lps[n] = {}
-                end
-                table.insert(lps[n], v)
-            else
-                lps[n] = v
-            end
-            --table.insert(lps,string.format("%s=%s",n,v))
-        end
-    end
-    print(dump(stacks))
-    -- print("info="..dump(dbs))
-    -- print("_ENV="..dump(ups._ENV or lps._ENV))
-end
-
-
-if activity then
-
-    function _M.print(...)
-        local buf = {}
-        for n = 1, select("#", ...) do
-            table.insert(buf, tostring(select(n, ...)))
-        end
-        local msg = table.concat(buf, "\t\t")
-        activity.sendMsg(msg)
-    end
-end
-
-
-function _M.getids()
-    return luajava.ids
-end
-
-local LuaAsyncTask = luajava.bindClass("com.androlua.LuaAsyncTask")
-local LuaThread = luajava.bindClass("com.androlua.LuaThread")
-local LuaTimer = luajava.bindClass("com.androlua.LuaTimer")
-local Object = luajava.bindClass("java.lang.Object")
-
-
-local function setmetamethod(t, k, v)
-    getmetatable(t)[k] = v
-end
-
-local function getmetamethod(t, k, v)
-    return getmetatable(t)[k]
-end
-
-
-local getjavamethod = getmetamethod(LuaThread, "__index")
-local function __call(t, k)
-    return function(...)
-        if ... then
-            t.call(k, Object { ... })
-        else
-            t.call(k)
-        end
-    end
-end
-
-local function __index(t, k)
-    local s, r = pcall(getjavamethod, t, k)
-    if s then
-        return r
-    end
-    local r = __call(t, k)
-    setmetamethod(t, k, r)
-    return r
-end
-
-local function __newindex(t, k, v)
-    t.set(k, v)
-end
-
-local function checkPath(path)
-    if path:find("^[^/][%w%./_%-]+$") then
-        if not path:find("%.lua$") then
-            path = string.format("%s/%s.lua", activity.luaDir, path)
-        else
-            path = string.format("%s/%s", activity.luaDir, path)
-        end
-    end
-    return path
-end
-
-function _M.thread(src, ...)
-    if type(src) == "string" then
-        src = checkPath(src)
-    end
-    local luaThread
-    if ... then
-        luaThread = LuaThread(activity or service, src, true, Object { ... })
+        return table.concat(out, "\n")
     else
-        luaThread = LuaThread(activity or service, src, true)
+        local out = {}
+        for k, v in pairs(o) do
+            table.insert(out, string.format("%s = %s", k, v))
+        end
+        return table.concat(out, "\n")
     end
-    luaThread.start()
-    --setmetamethod(luaThread,"__index",__index)\
-    --setmetamethod(luaThread,"__newindex",__newindex)
-    return luaThread
 end
 
-function _M.task(src, ...)
-    local args = { ... }
-    local callback = args[select("#", ...)]
-    args[select("#", ...)] = nil
-    local luaAsyncTask = LuaAsyncTask(activity or service, src, callback)
-    luaAsyncTask.executeOnExecutor(LuaAsyncTask.THREAD_POOL_EXECUTOR, args)
-    return luaAsyncTask
+
+function _M.printf(...)
+    print(string.format(...))
 end
 
-function _M.timer(f, d, p, ...)
-    local luaTimer = LuaTimer(activity or service, f, Object { ... })
-    if p == 0 then
-        luaTimer.start(d)
-    else
-        luaTimer.start(d, p)
-    end
-    return luaTimer
-end
 
-local os_mt = {}
-os_mt.__index = function(t, k)
-    local _t = {}
-    _t.__cmd = (rawget(t, "__cmd") or "") .. k .. " "
-    setmetatable(_t, os_mt)
-    return _t
-end
-os_mt.__call = function(t, ...)
-    local cmd = t.__cmd .. table.concat({ ... }, " ")
-    local p = io.popen(cmd)
-    local s = p:read("a")
-    p:close()
-    return s
-end
-setmetatable(os, os_mt)
-
-env_import(_G)
-
-local luajava_mt = {}
-luajava_mt.__index = function(t, k)
-    local b, ret = xpcall(function()
-        return luajava.bindClass((rawget(t, "__name") or "") .. k)
-    end,
-        function()
-            local p = {}
-            p.__name = (rawget(t, "__name") or "") .. k .. "."
-            setmetatable(p, luajava_mt)
-            return p
-        end)
-    rawset(t, k, ret)
-    return ret
-end
-setmetatable(luajava, luajava_mt)
-
-return env_import
-
+return env_import(_G)
