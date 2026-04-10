@@ -11,7 +11,7 @@ import "android.net.*"
 import "android.content.*"
 import "android.graphics.drawable.*"
 import "androidx.appcompat.widget.AppCompatEditText"
-import "bin"
+import "apk.packager.ApkPackager"
 import "autotheme"
 
 require "layout"
@@ -228,18 +228,6 @@ m = {
       { MenuItem,
         title = "Check Errors",
         id = "code_check", },
-    },
-    { SubMenu,
-      title = "Navigate...",
-      { MenuItem,
-        title = "Search",
-        id = "goto_seach", },
-      { MenuItem,
-        title = "Go to",
-        id = "goto_line", },
-      { MenuItem,
-        title = "Symbols",
-        id = "goto_func", },
     },
     { SubMenu,
       title = "More...",
@@ -848,17 +836,20 @@ function importx(path, tp)
     zip.close()
     function callback2(s)
         LuaUtil.rmDir(File(activity.getLuaExtDir("bin/.temp")))
-        bin_dlg.hide()
-        bin_dlg.Message = ""
-        if s==nil or not s:find("success") then
+        if bin_dlg then
+            bin_dlg.hide()
+            bin_dlg.Message = ""
+        end
+        local result = tostring(s or "")
+        if result == "" or (not result:find("success") and not result:find("打包成功") and not result:find("Packaging successful")) then
             create_error_dlg()
-            error_dlg.Message = s
+            error_dlg.Message = result
             error_dlg.show()
         end
     end
 
     if tp == "build" then
-        bin(out)
+        buildApkWithPackager(out, callback2)
         return out
     elseif tp == "plugin" then
         Toast.makeText(activity, "Import plugin." .. s, Toast.LENGTH_SHORT ).show()
@@ -869,6 +860,44 @@ function importx(path, tp)
     read(luapath)
     Toast.makeText(activity, "Import project: " .. luadir, Toast.LENGTH_SHORT ).show()
     return out
+end
+
+local apkPackager
+
+local function getApkPackager()
+    if apkPackager then
+        return apkPackager
+    end
+    apkPackager = apkPackager or ApkPackager(activity)
+    return apkPackager
+end
+
+local function buildApkWithPackager(projectPath, onFinish)
+    local packager = getApkPackager()
+    local callback = luajava.createProxy("apk.packager.ApkPackager$ProgressCallback", {
+        onProgress = function(message)
+            if status and message then
+                activity.runOnUiThread(function()
+                    status.setText("Build status: " .. tostring(message))
+                end)
+            end
+        end,
+        onFinish = function(result)
+            activity.runOnUiThread(function()
+                if onFinish then
+                    onFinish(result)
+                end
+            end)
+        end
+    })
+    local ok, err = pcall(function()
+        packager:bin(projectPath, callback)
+    end)
+    if not ok then
+        if onFinish then
+            onFinish("Build failed: " .. tostring(err))
+        end
+    end
 end
 
 func = {}
@@ -1033,10 +1062,10 @@ buildfile = function()
 
     status.setText("Build status: running")
     Toast.makeText(activity, "Building APK...", Toast.LENGTH_SHORT ).show()
-    task(bin, projectPath, app, ver, pkg, out, function(msg)
+    buildApkWithPackager(projectPath, function(msg)
         local result = msg or "Build failed"
         status.setText("Build status: " .. result)
-        Toast.makeText(activity, result, Toast.LENGTH_SHORT).show()
+        Toast.makeText(activity, tostring(result), Toast.LENGTH_SHORT).show()
     end)
 end
 
@@ -1170,9 +1199,6 @@ function onMenuItemSelected(id, item)
         [optmenu.code_format] = func.format,
         [optmenu.code_check] = func.check,
         [optmenu.code_import] = func.fiximport,
-        [optmenu.goto_line] = func.gotoline,
-        [optmenu.goto_func] = func.navi,
-        [optmenu.goto_seach] = func.seach,
         [optmenu.more_logcat] = func.logcat,
         [optmenu.more_java] = func.java,
         [optmenu.more_about] = func.about,
