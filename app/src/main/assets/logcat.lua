@@ -53,45 +53,77 @@ function clearlog()
   return s
 end
 
+
+local function runTask(func, ...)
+  if type(task) == "function" then
+    return task(func, ...)
+  end
+
+  if activity and activity.task then
+    local args = {...}
+    local callback = args[#args]
+    local taskArgs = nil
+    if #args > 1 then
+      taskArgs = {}
+      for i = 1, #args - 1 do
+        taskArgs[i] = args[i]
+      end
+    end
+
+    if type(callback) == "function" then
+      return activity.task(func, taskArgs, callback)
+    end
+
+    return activity.task(func, taskArgs)
+  end
+
+  local results = {func(...)}
+  local callback = select(select('#', ...), ...)
+  if type(callback) == "function" then
+    callback(table.unpack(results))
+  end
+  return results[1]
+end
+
 func={}
 func.All=function()
   activity.setTitle("LogCat - All")
-  task(readlog,"",show)
+  runTask(readlog,"",show)
 end
 func.Lua=function()
   activity.setTitle("LogCat - Lua")
-  task(readlog,"lua:* *:S",show)
+  runTask(readlog,"lua:* *:S",show)
 end
 func.Test=function()
   activity.setTitle("LogCat - Test")
-  task(readlog,"test:* *:S",show)
+  runTask(readlog,"test:* *:S",show)
 end
 func.Tcc=function()
   activity.setTitle("LogCat - Tcc")
-  task(readlog,"tcc:* *:S",show)
+  runTask(readlog,"tcc:* *:S",show)
 end
 func.Error=function()
   activity.setTitle("LogCat - Error")
-  task(readlog,"*:E",show)
+  runTask(readlog,"*:E",show)
 end
 func.Warning=function()
   activity.setTitle("LogCat - Warning")
-  task(readlog,"*:W",show)
+  runTask(readlog,"*:W",show)
 end
 func.Info=function()
   activity.setTitle("LogCat - Info")
-  task(readlog,"*:I",show)
+  runTask(readlog,"*:I",show)
 end
 func.Debug=function()
   activity.setTitle("LogCat - Debug")
-  task(readlog,"*:D",show)
+  runTask(readlog,"*:D",show)
 end
 func.Verbose=function()
   activity.setTitle("LogCat - Verbose")
-  task(readlog,"*:V",show)
+  runTask(readlog,"*:V",show)
 end
 func.Clear=function()
-  task(clearlog,show)
+  runTask(clearlog,show)
 end
 
 scroll=ScrollView(activity)
