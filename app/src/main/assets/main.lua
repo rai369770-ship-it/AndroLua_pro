@@ -13,6 +13,8 @@ import "android.graphics.drawable.*"
 import "androidx.appcompat.widget.AppCompatEditText"
 import "apk.packager.ApkPackager"
 import "autotheme"
+LuaExecutionBridge = luajava.bindClass("com.androlua.LuaExecutionBridge")
+LogcatActivity = luajava.bindClass("com.androlua.LogcatActivity")
 
 require "layout"
 activity.setTitle('Androlua professional')
@@ -979,15 +981,16 @@ end
 func.check = function(b)
     local src = editor.getText()
     src = src.toString()
-    if luapath:find("%.aly$") then
-        src = "return " .. src
-    end
-    local _, data = loadstring(src)
+    local data = LuaExecutionBridge.checkSyntax(src, luapath:find("%.aly$") ~= nil)
 
     if data then
         local _, _, line, data = data:find(".(%d+).(.+)")
-        editorGotoLine(tonumber(line))
-        Toast.makeText(activity, line .. ":" .. data, Toast.LENGTH_SHORT ).show()
+        if line then
+            editorGotoLine(tonumber(line))
+            Toast.makeText(activity, line .. ":" .. data, Toast.LENGTH_SHORT ).show()
+        else
+            Toast.makeText(activity, tostring(data), Toast.LENGTH_SHORT ).show()
+        end
         return true
     elseif b then
     else
@@ -1022,11 +1025,13 @@ end
 
 func.luac = function()
     save()
-    local path, str = console.build(luapath)
-    if path then
-        Toast.makeText(activity, "Compile completed: " .. path, Toast.LENGTH_SHORT ).show()
+    local ok, result = pcall(function()
+        return LuaExecutionBridge.compileFile(luapath)
+    end)
+    if ok then
+        Toast.makeText(activity, "Compile completed: " .. result, Toast.LENGTH_SHORT ).show()
     else
-        Toast.makeText(activity, "Compile failed: " .. str, Toast.LENGTH_SHORT ).show()
+        Toast.makeText(activity, "Compile failed: " .. tostring(result), Toast.LENGTH_SHORT ).show()
     end
 end
 
@@ -1078,7 +1083,8 @@ func.info = function()
 end
 
 func.logcat = function()
-    activity.newActivity("logcat")
+    local intent = Intent(activity, LogcatActivity)
+    activity.startActivity(intent)
 end
 
 func.java = function()
