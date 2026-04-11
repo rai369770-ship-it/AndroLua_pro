@@ -201,9 +201,32 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name="com.androlua.MainActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.MoreActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.OpenActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.AboutActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.RecentActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.SaveActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.FileActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.NewActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.RunActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.CompileActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.CheckErrorsActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.ProjectActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.BuildActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.DialogsActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.ShareActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.LayoutActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.UiActivity" android:theme="@style/app_theme" />
+        <activity android:name="com.androlua.JavaBrowserActivity" android:theme="@style/app_theme" />
         <activity
             android:name="com.nirenr.screencapture.ScreenCaptureActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity
+            android:name="com.androlua.LogcatActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:label="LogCat"
+            android:theme="@style/app_theme" />
         <service
             android:name="com.androlua.LuaService"
             android:enabled="true"/>
